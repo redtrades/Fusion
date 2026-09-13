@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RenewTaskLeaseDeps } from "../executor/renew-task-lease.js";
 import { renewTaskLease } from "../executor/renew-task-lease.js";
 import { readLeaseAuditHistory } from "../util/lease-audit.js";
+const { ghRead } = vi.hoisted(() => ({ ghRead: vi.fn() }));
+vi.mock("@fusion/core", () => ({ runGhJsonAsync: ghRead }));
 
 describe("lease renewal observation", () => {
   let dir: string;
@@ -19,9 +21,15 @@ describe("lease renewal observation", () => {
     pr = { url: "https://github.com/example/repo/pull/1", headOid: "a".repeat(40),
       checkRollup: "pending", lastReviewDecision: "REVIEW_REQUIRED",
       lastCheckedAt: new Date().toISOString() };
+    ghRead.mockReset().mockImplementation(async () => ({ headRefOid: pr.headOid,
+      reviewDecision: pr.lastReviewDecision,
+      statusCheckRollup: pr.checkRollup ? [{ __typename: "CheckRun", name: "test", status: pr.checkRollup }] : null }));
     deps = {
       store: { renewCheckoutLease: vi.fn().mockResolvedValue(undefined),
-        getTaskDir: () => dir, getTask: vi.fn(async () => ({ prInfo: pr })),
+        getTaskDir: () => dir, getTask: vi.fn(async () => ({ prInfo: {
+          url: "https://github.com/example/repo/pull/1", headOid: "worker-report-is-ignored",
+          lastCheckedAt: "2000-01-01T00:00:00Z",
+        } })),
         updateTask: vi.fn() } as unknown as RenewTaskLeaseDeps["store"],
       options: {}, getRunContextFor: () => undefined,
     };
@@ -40,8 +48,7 @@ describe("lease renewal observation", () => {
   });
 
   async function tick() {
-    vi.setSystemTime(Date.now() + 60_000);
-    pr.lastCheckedAt = new Date().toISOString();
+    vi.setSystemTime(Date.now() + 30_000);
     await renew();
   }
 
@@ -64,18 +71,45 @@ describe("lease renewal observation", () => {
     expect(deps.store.updateTask).not.toHaveBeenCalled();
   });
 
-  it("does not call missing, partial or stale artifact evidence spinning", async () => {
+  it("does not call unavailable or partial external evidence spinning", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     await renew();
-    for (let i = 0; i < 4; i++) { vi.setSystemTime(Date.now() + 60_000); await renew(); }
+    ghRead.mockRejectedValue(new Error("unauthenticated"));
+    for (let i = 0; i < 4; i++) await tick();
     expect((await events()).at(-1).progress.status).toBe("unknown");
-    delete pr.checkRollup;
+    ghRead.mockResolvedValue({ headRefOid: pr.headOid });
     for (let i = 0; i < 4; i++) await tick();
     expect((await events()).at(-1).progress).toMatchObject({ status: "unknown", zero_delta_streak: 0 });
     deps.store.getTask = vi.fn().mockResolvedValue({ progress: "I am progressing", prInfos: [] });
     await tick();
     expect((await events()).at(-1).artifacts).toEqual([]);
     expect((await events()).at(-1).progress.status).toBe("unknown");
+  });
+
+  it("samples each 30-second renewal even when unchanged dashboard data is never persisted", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    await renew(); await tick(); await tick(); await tick();
+    expect(ghRead).toHaveBeenCalledTimes(4);
+    expect(ghRead).toHaveBeenLastCalledWith(["pr", "view", "1", "--repo", "example/repo",
+      "--json", "headRefOid,statusCheckRollup,reviewDecision"], { timeoutMs: 1_500 });
+    const last = (await events()).at(-1);
+    expect(last.progress).toMatchObject({ status: "spinning", zero_delta_streak: 3 });
+    expect(last.artifacts[0].head).toBe("a".repeat(40));
+    expect(deps.store.updateTask).not.toHaveBeenCalled();
+  });
+
+  it("ignores check ordering and counts a fresh empty review/check result as known", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const checks = [{ name: "a", status: "COMPLETED", conclusion: "SUCCESS" },
+      { context: "b", state: "SUCCESS" }];
+    ghRead.mockResolvedValue({ headRefOid: "a".repeat(40), reviewDecision: "", statusCheckRollup: checks });
+    await renew();
+    ghRead.mockResolvedValue({ headRefOid: "a".repeat(40), reviewDecision: "", statusCheckRollup: [...checks].reverse() });
+    await tick();
+    expect((await events()).at(-1).progress).toMatchObject({ status: "unchanged", ci_state_changed: false });
+    ghRead.mockResolvedValue({ headRefOid: "a".repeat(40), reviewDecision: "", statusCheckRollup: [] });
+    await tick();
+    expect((await events()).at(-1).progress.status).toBe("progressing");
   });
 
   it("joins each claim read-only and does not carry streaks across epochs or runs", async () => {

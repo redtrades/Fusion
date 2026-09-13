@@ -18,7 +18,7 @@ pnpm exec tsx scripts/lease-audit.ts /path/to/task/lease-audit.jsonl '["FN-261",
 
 The JSON result groups renewal history by `claim_id`, with the latest status
 beside each group. The optional second argument selects exactly one claim.
-The command only reads the file: no database, network, model, lease write,
+The command only reads the file: no database query, network, model, lease write,
 GitHub comment or lifecycle action. Missing files return an empty history;
 invalid JSON or an unsupported event schema fails visibly rather than
 silently dropping observations. Copy the log from the controller host when
@@ -28,19 +28,25 @@ in `packages/engine/src/util/lease-audit.ts` for an in-process lead.
 ## Interpreting the events
 
 `claim_id` encodes `[task_id, worker_id, lease_epoch, node_id, run_id]`.
-Each event includes that tuple, the ISO renewal timestamp `at`, observed
-artifacts, and computed head/CI/review deltas. An absent run ID is `null`.
+Each event includes that tuple, the ISO renewal timestamp `at`, observation
+completion timestamp `observed_at`, external artifacts, and computed
+head/CI/review deltas. An absent run ID is `null`.
 The underlying renewal API does not return an expiry timestamp, so the
 observer does not invent one.
 
-Only the GitHub observation mirror (`prInfos`, or the primary `prInfo`)
-supplies artifact fields: PR URL, `headOid`, `checkRollup`,
-`lastReviewDecision`, and `lastCheckedAt`. Those fields are populated by
-the existing GitHub badge polling/refresh paths, for example
-`packages/dashboard/src/github-poll.ts` and
-`packages/dashboard/src/routes/register-git-github.ts`. There is no new
-worker progress argument, self-reported counter, transcript inspection,
-or progress attestation.
+The task supplies only linked PR URLs (`prInfos`, or primary `prInfo`). The
+observer uses Fusion's existing `runGhJsonAsync` adapter to read each PR's
+`headRefOid`, `statusCheckRollup`, and `reviewDecision` directly from GitHub
+on every renewal. CI fields are normalized and sorted, excluding timestamps
+and output prose; an empty check list and an empty review decision are known
+“none” states. There is no worker progress argument, self-reported counter,
+transcript inspection, or progress attestation. Stored badge progress fields
+are never trusted as observations.
+
+The controller needs authenticated `gh` access. Missing auth, API failure,
+timeout, unsupported PR URLs, or incomplete responses yield unknown. Only
+HTTPS `github.com` PR URLs are supported in this slice. The query CLI itself
+still reads only the log and makes no network requests.
 
 - `progressing`: at least one comparable head, CI or review field changed.
   This is an artifact change, not a claim that the work improved.
@@ -51,9 +57,10 @@ or progress attestation.
   unavailable observer, or stale evidence. Unknown resets the zero streak.
 
 For a delta to count, every current PR observation must be newer than the
-previous renewal and no later than this renewal. Reusing the same cached
-GitHub sample never counts as a zero delta. Null review decisions count as
-missing evidence. A new worker, epoch, node or run starts a separate history.
+previous observation and no later than this observation. Cached dashboard
+badge data never counts as a sample: its 60-second polling loop does not
+persist unchanged results, whereas lease renewals run every 30 seconds.
+Null/missing review fields count as missing evidence. A new worker, epoch, node or run starts a separate history.
 An executor with no PR yet remains unknown; this slice makes no claim about
 unpublished local work.
 
@@ -68,6 +75,9 @@ supported for streak calculation. All claim events remain queryable in the file.
 
 The artifact read and file sink use the existing bounded audit seam: up to
 two seconds for artifact collection and four seconds for the whole observer.
+Each read-only gh subprocess additionally has a 1.5-second timeout. At the
+current 30-second renewal cadence this adds up to two queries per minute per
+linked PR; rate limits degrade observations to unknown rather than affect work.
 Failures/timeouts warn through the run-audit logger and cannot reject a
 successful lease renewal. A missing/hanging artifact reader yields unknown;
 an unavailable file sink can lose an event. A crash between the lease write
@@ -97,6 +107,12 @@ Offline dependency install lacked one cached tarball; the frozen-lockfile
 online install succeeded without running package scripts. The pre-change
 renewal tests passed (2); the first two audit tests failed for the expected
 missing JSONL file. No local-model inference was used.
+
+Separate code review rejected revision `be598480e`: its dashboard cache
+could not supply fresh unchanged samples at renewal cadence. The correction
+queries GitHub directly and tests four 30-second renewals while the stored
+PR mirror stays stale. This review does not replace the lead's required
+different-model-family review.
 
 Rejected options: an agents-only contract would leave the real renewal
 unobserved; worker counters would violate the scope; auto-pause and GitHub

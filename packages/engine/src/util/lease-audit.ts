@@ -2,14 +2,7 @@ import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { PrInfo, TaskStore } from "@fusion/core";
 import { emitBoundedRunAudit } from "./emit-bounded-run-audit.js";
-
-type Artifact = {
-  pr: string;
-  head: string | null;
-  ci: string | null;
-  review: string | null;
-  observed_at: string | null;
-};
+import { readLeaseArtifact, type LeaseArtifact } from "./lease-artifacts.js";
 type Progress = {
   status: "unknown" | "progressing" | "unchanged" | "spinning";
   zero_delta_streak: number;
@@ -27,7 +20,8 @@ export type LeaseAuditEvent = {
   node_id: string;
   run_id: string | null;
   at: string;
-  artifacts: Artifact[];
+  observed_at: string;
+  artifacts: LeaseArtifact[];
   progress: Progress;
 };
 
@@ -45,8 +39,8 @@ function progressSince(previous: LeaseAuditEvent | undefined, current: LeaseAudi
   const before = previous.artifacts;
   const after = current.artifacts;
   if (after.some((pr) => !pr.observed_at ||
-    Date.parse(pr.observed_at) <= Date.parse(previous.at) ||
-    !(Date.parse(pr.observed_at) <= Date.parse(current.at)))) return unknown;
+    Date.parse(pr.observed_at) <= Date.parse(previous.observed_at) ||
+    !(Date.parse(pr.observed_at) <= Date.parse(current.observed_at)))) return unknown;
   if (JSON.stringify(before.map((pr) => pr.pr)) !== JSON.stringify(after.map((pr) => pr.pr))) return unknown;
   const delta = (key: "head" | "ci" | "review"): boolean | null => {
     if (after.some((pr, i) => pr[key] !== null && before[i][key] !== null && pr[key] !== before[i][key])) return true;
@@ -103,19 +97,18 @@ export async function observeLeaseRenewal(
   const marker = { mutationType: "task:lease-renewed" };
   await emitBoundedRunAudit({ recordRunAuditEvent: async () => {
     const file = join(store.getTaskDir(taskId), "lease-audit.jsonl");
-    let artifacts: Artifact[] = [];
+    let artifacts: LeaseArtifact[] = [];
     await emitBoundedRunAudit({ recordRunAuditEvent: async () => {
       const task = await store.getTask(taskId);
       const prs: PrInfo[] = task.prInfos?.length ? task.prInfos : task.prInfo ? [task.prInfo] : [];
-      artifacts = prs.map((pr) => ({ pr: pr.url, head: pr.headOid ?? null,
-        ci: pr.checkRollup ?? null, review: pr.lastReviewDecision ?? null,
-        observed_at: pr.lastCheckedAt ?? null })).sort((a, b) => a.pr.localeCompare(b.pr));
+      artifacts = (await Promise.all([...new Set(prs.map((pr) => pr.url))].map(readLeaseArtifact)))
+        .sort((a, b) => a.pr.localeCompare(b.pr));
     } }, { mutationType: "task:lease-artifacts-observed" });
     const event: LeaseAuditEvent = {
       schema_version: 1, event: "lease_renewed",
       claim_id: JSON.stringify([taskId, workerId, leaseEpoch, nodeId, runId ?? null]),
       task_id: taskId, worker_id: workerId, lease_epoch: leaseEpoch,
-      node_id: nodeId, run_id: runId ?? null, at, artifacts,
+      node_id: nodeId, run_id: runId ?? null, at, observed_at: new Date().toISOString(), artifacts,
       progress: { status: "unknown", zero_delta_streak: 0,
         pr_head_changed: null, ci_state_changed: null, review_state_changed: null },
     };

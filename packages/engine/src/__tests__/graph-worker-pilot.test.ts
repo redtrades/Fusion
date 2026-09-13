@@ -61,6 +61,16 @@ describe("pilot process ownership", () => {
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
 
+  it("separates a successful exit from a slow start notification", async () => {
+    const root = mkdtempSync(join(tmpdir(), "fusion-ws111-notify-"));
+    try {
+      const result = await runGraphWorkerPilot({ directory: join(root, "attempt"), command: process.execPath,
+        args: ["-e", "process.exit(0)"], leaseWindowMs: 1_000, pollMs: 50,
+        onStarted: () => new Promise((resolve) => setTimeout(resolve, 250)) });
+      expect(result.state).toBe("completed");
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
   it("reaps its owned child and fences failure traversal when a callback fails", async () => {
     const root = mkdtempSync(join(tmpdir(), "fusion-ws111-error-"));
     let child: ChildProcess | undefined;

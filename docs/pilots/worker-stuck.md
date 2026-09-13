@@ -27,7 +27,8 @@ OS PID probing as fallback), lease freshness, and a monotonic stdout byte
 counter. Lease renewal and stderr do not count as agent progress.
 The intentionally faulty pilot adapter leaves nonzero/signal exits pending,
 reproducing the issue's lost completion notification. Exit 0 stops death
-observation immediately and allows up to one lease window for output to drain.
+observation immediately, independently of start-notification latency, and allows
+up to one lease window for output and notification completion to drain.
 Excessive drain is a harness error, not `worker-stuck`.
 
 A gone process with unchanged progress yields `worker-stuck`; a new progress

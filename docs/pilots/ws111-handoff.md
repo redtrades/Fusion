@@ -80,7 +80,11 @@ an ENOENT rejection. Four added regressions reproduced all findings (4 failed,
 11 passed, one unhandled rejection). The corrections cap post-death progress
 grace, separate clean exit from bounded output drain, and place setup/run
 inside the spawning harness's error cleanup boundary. The observer itself
-still cannot kill or restart. All 15 targeted tests now pass.
+still cannot kill or restart. The next exact-revision review caught a slow-notification variant of the
+clean-exit race. Its regression also failed before correction. Notification
+success now drains separately after death observation ends; notification
+failure still propagates through owned-child cleanup. All 16 targeted tests
+now pass.
 
 The source/CLI build passed. Boot initially failed because the dependency
 install skipped embedded PostgreSQL's symlink hydration. `pnpm rebuild` did

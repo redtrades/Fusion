@@ -118,13 +118,16 @@ export async function runGraphWorkerPilot(options: {
               abort.abort("worker-stuck");
             },
           });
-          const result = await monitor.race(Promise.all([agentExited, options.onStarted?.(child)]).then(([done]) => done));
+          // FNXC:GraphWorkerPilot 2026-09-13-21:48: Notification latency must not postpone successful-exit observation; only its failure competes with agent exit.
+          const notification = Promise.resolve().then(() => options.onStarted?.(child));
+          const notificationFailed = notification.then(() => new Promise<never>(() => {}));
+          const result = await monitor.race(Promise.race([agentExited, notificationFailed]));
           if ("state" in result) return { outcome: "failure", value: "worker-stuck" };
           // FNXC:GraphWorkerPilot 2026-09-13-21:42: Clean-exit output gets one lease to drain, with observation stopped; retained pipes fail as a harness error, never worker-stuck.
           let drainTimer: ReturnType<typeof setTimeout> | undefined;
           try {
-            await Promise.race([managed.waitExit(), new Promise<never>((_, reject) => {
-              drainTimer = setTimeout(() => reject(new Error("Agent output drain exceeded lease window")), leaseWindowMs);
+            await Promise.race([Promise.all([managed.waitExit(), notification]), new Promise<never>((_, reject) => {
+              drainTimer = setTimeout(() => reject(new Error("Agent completion drain exceeded lease window")), leaseWindowMs);
             })]);
           } finally { if (drainTimer) clearTimeout(drainTimer); }
           if (ioError) throw ioError;

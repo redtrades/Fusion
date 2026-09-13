@@ -52,6 +52,7 @@ export function observeGraphWorker(options: {
   let exited = child.exitCode !== null || child.signalCode !== null;
   const onExit = () => { exited = true; };
   child.once("exit", onExit);
+  let deathObserved = false;
   let progress = -1;
   let progressAt = Date.now();
   const read = () => {
@@ -77,12 +78,15 @@ export function observeGraphWorker(options: {
       try {
         const now = Date.now();
         const sample = read();
-        if (sample.progress > progress) {
+        const liveness = exited || deathObserved ? "gone" : (options.probe ?? probeProcess)(pid);
+        const alreadyGone = deathObserved;
+        if (liveness === "gone") deathObserved = true;
+        // FNXC:GraphWorkerPilot 2026-09-13-21:42: Freeze worker progress after one death observation; descendant/pipe bytes cannot renew life.
+        if (!alreadyGone && sample.progress > progress) {
           progress = sample.progress;
           progressAt = now;
           return;
         }
-        const liveness = exited ? "gone" : (options.probe ?? probeProcess)(pid);
         if (liveness !== "gone") return;
         const leaseAgeMs = now - sample.leaseRenewedAt;
         const record: WorkerStuck = {

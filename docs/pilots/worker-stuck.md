@@ -26,15 +26,18 @@ agent death. The independent observer timer samples every 100 ms against a
 OS PID probing as fallback), lease freshness, and a monotonic stdout byte
 counter. Lease renewal and stderr do not count as agent progress.
 The intentionally faulty pilot adapter leaves nonzero/signal exits pending,
-reproducing the issue's lost completion notification. Exit 0 completes normally.
+reproducing the issue's lost completion notification. Exit 0 stops death
+observation immediately and allows up to one lease window for output to drain.
+Excessive drain is a harness error, not `worker-stuck`.
 
 A gone process with unchanged progress yields `worker-stuck`; a new progress
-sample gets one observation to settle. Normal drain is detected within two
-polls. A live or unknown process is never classified from inactivity alone.
+sample gets at most one observation to settle. After the first proven death,
+worker progress freezes: further pipe/descendant bytes cannot extend its life.
+Death is detected within two polls. A live or unknown process is never classified from inactivity alone.
 Expired leases are recorded accurately and do not hide proven worker death.
 PID reuse after an observed child exit cannot resurrect that bound attempt.
 The timing guarantee assumes a schedulable host event loop, responsive local
-storage, and no further progress from the dead worker. This pilot does not
+storage. This pilot does not
 monitor remote PIDs or an unresponsive engine.
 
 The CLI returns exit **2** and prints `worker-stuck` for the lead. The attempt
@@ -44,7 +47,10 @@ progress counter/age, and observation time. Preserve these records. The graph
 is cancelled before it can traverse its failure edge; no retry, recovery
 node, restart, or new agent is dispatched. Exit 0 means completed, exit 1
 means an error or graph failure. A storage/observer error is never reported
-as successfully persisted `worker-stuck`.
+as successfully persisted `worker-stuck`. On setup, callback, or observer
+error, the spawning harness cancels traversal and reaps only its captured
+process group. This is error cleanup, not watchdog recovery; the observer
+itself has no process-kill capability.
 
 `worker-stuck` is terminal for the **pilot attempt**. It is not a new Fusion
 TaskStore lifecycle column and does not move a live board card backwards.

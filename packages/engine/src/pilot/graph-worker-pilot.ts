@@ -82,26 +82,33 @@ export async function runGraphWorkerPilot(options: {
           cwd: directory, stdio: ["ignore", "pipe", "pipe"], maxLifetimeMs: 0,
         });
         const child = managed.child;
-        const sample = { leaseRenewedAt: Date.now(), progress: 0 };
-        const initial = { state: "running", attemptId, nodeId: node.id, pid: child.pid, predecessor };
-        writeJson(statePath, initial);
-        writeJson(join(directory, "lease.json"), sample);
-        const progress = (chunk: Buffer) => {
-          appendFileSync(join(directory, "agent.log"), chunk, { mode: 0o600 });
-          sample.progress += chunk.length;
-        };
-        child.stdout!.on("data", progress);
-        child.stderr!.on("data", (chunk: Buffer) => appendFileSync(join(directory, "agent.log"), chunk, { mode: 0o600 }));
-        const renew = setInterval(() => { sample.leaseRenewedAt = Date.now(); }, pollMs);
-        let monitor: ReturnType<typeof observeGraphWorker> | undefined;
-        try {
-          const agentDone = new Promise<{ outcome: "success" }>((resolveDone, reject) => {
-            child.once("error", reject);
-            child.once("close", (code) => {
-              // FNXC:GraphWorkerPilot 2026-09-13-21:27: Reproduce #260's lost exit notification: death leaves the adapter pending while leases renew.
-              if (code === 0) resolveDone({ outcome: "success" });
-            });
+        let rejectAgent: (error: unknown) => void = () => {};
+        let ioError: unknown;
+        const agentExited = new Promise<{ outcome: "success" }>((resolveDone, reject) => {
+          rejectAgent = reject;
+          child.once("error", reject);
+          child.once("exit", (code) => {
+            // FNXC:GraphWorkerPilot 2026-09-13-21:42: Successful exit ends death observation before stdio close; abnormal exits still reproduce #260's lost completion.
+            if (code === 0) resolveDone({ outcome: "success" });
           });
+        });
+        // FNXC:GraphWorkerPilot 2026-09-13-21:42: Setup may fail before the observer attaches; always consume a later spawn error.
+        void agentExited.catch(() => undefined);
+        const sample = { leaseRenewedAt: Date.now(), progress: 0 };
+        let renew: ReturnType<typeof setInterval> | undefined;
+        let monitor: ReturnType<typeof observeGraphWorker> | undefined;
+        const log = (chunk: Buffer, advances: boolean) => {
+          try {
+            appendFileSync(join(directory, "agent.log"), chunk, { mode: 0o600 });
+            if (advances) sample.progress += chunk.length;
+          } catch (error) { ioError = error; rejectAgent(error); }
+        };
+        child.stdout!.on("data", (chunk: Buffer) => log(chunk, true));
+        child.stderr!.on("data", (chunk: Buffer) => log(chunk, false));
+        try {
+          writeJson(statePath, { state: "running", attemptId, nodeId: node.id, pid: child.pid, predecessor });
+          writeJson(join(directory, "lease.json"), sample);
+          renew = setInterval(() => { sample.leaseRenewedAt = Date.now(); }, pollMs);
           monitor = observeGraphWorker({ attemptId, nodeId: node.id, child, leaseWindowMs, pollMs,
             read: () => sample,
             record: (terminal) => {
@@ -111,10 +118,26 @@ export async function runGraphWorkerPilot(options: {
               abort.abort("worker-stuck");
             },
           });
-          const result = await monitor.race(Promise.all([agentDone, options.onStarted?.(child)]).then(([done]) => done));
-          return "state" in result ? { outcome: "failure", value: "worker-stuck" } : result;
+          const result = await monitor.race(Promise.all([agentExited, options.onStarted?.(child)]).then(([done]) => done));
+          if ("state" in result) return { outcome: "failure", value: "worker-stuck" };
+          // FNXC:GraphWorkerPilot 2026-09-13-21:42: Clean-exit output gets one lease to drain, with observation stopped; retained pipes fail as a harness error, never worker-stuck.
+          let drainTimer: ReturnType<typeof setTimeout> | undefined;
+          try {
+            await Promise.race([managed.waitExit(), new Promise<never>((_, reject) => {
+              drainTimer = setTimeout(() => reject(new Error("Agent output drain exceeded lease window")), leaseWindowMs);
+            })]);
+          } finally { if (drainTimer) clearTimeout(drainTimer); }
+          if (ioError) throw ioError;
+          return result;
+        } catch (error) {
+          // FNXC:GraphWorkerPilot 2026-09-13-21:42: The spawning harness owns error cleanup, not the observer. Reap only its captured process group; never restart or traverse recovery.
+          abort.abort("pilot-error");
+          monitor?.stop();
+          managed.kill("SIGKILL");
+          await managed.waitExit();
+          throw error;
         } finally {
-          clearInterval(renew);
+          if (renew) clearInterval(renew);
           monitor?.stop();
         }
       },

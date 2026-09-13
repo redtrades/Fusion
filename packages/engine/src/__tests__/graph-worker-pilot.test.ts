@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { once } from "node:events";
+import type { ChildProcess } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { runGraphWorkerPilot } from "../pilot/graph-worker-pilot.js";
 
@@ -44,6 +45,47 @@ describe("pilot graph process-death acceptance", () => {
       await expect(runGraphWorkerPilot({ directory: join(root, "attempt-3"), command: process.execPath,
         args: ["-e", "process.exit(0)"], resumeFrom: first, leadApproval: "acceptance-test-operator",
       })).rejects.toThrow("EEXIST");
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+});
+
+
+describe("pilot process ownership", () => {
+  it("does not misclassify exit 0 while inherited stdout is still draining", async () => {
+    const root = mkdtempSync(join(tmpdir(), "fusion-ws111-drain-"));
+    try {
+      const result = await runGraphWorkerPilot({ directory: join(root, "attempt"), command: process.execPath,
+        args: ["-e", "require('node:child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 300)'], {stdio:['ignore',1,2]}).unref(); process.exit(0)"],
+        leaseWindowMs: 1_000, pollMs: 50 });
+      expect(result.state).toBe("completed");
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it("reaps its owned child and fences failure traversal when a callback fails", async () => {
+    const root = mkdtempSync(join(tmpdir(), "fusion-ws111-error-"));
+    let child: ChildProcess | undefined;
+    try {
+      const result = await runGraphWorkerPilot({ directory: join(root, "attempt"), command: process.execPath,
+        args: ["-e", "setInterval(() => {}, 1000)"], onStarted: (started) => {
+          child = started; throw new Error("notification failure");
+        } });
+      expect(result.state).toBe("failed");
+      expect(child!.exitCode !== null || child!.signalCode !== null).toBe(true);
+      expect(result.visitedNodeIds).not.toContain("recover");
+    } finally {
+      if (child && child.exitCode === null && child.signalCode === null) {
+        const exited = once(child, "exit"); child.kill("SIGKILL"); await exited;
+      }
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reports a spawn failure without leaving an unhandled agent rejection", async () => {
+    const root = mkdtempSync(join(tmpdir(), "fusion-ws111-spawn-"));
+    try {
+      const result = await runGraphWorkerPilot({ directory: join(root, "attempt"), command: join(root, "missing"), args: [] });
+      expect(result.state).toBe("failed");
+      expect(result.visitedNodeIds).not.toContain("recover");
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
 });

@@ -66,6 +66,24 @@ Implementation revision: `459a44aab70e65458c2733575d19ab930db2aff2`.
 - No automatic restart, cross-host PID support, distributed fencing, or
   live-but-hung worker classification. No local-model inference was used.
 
+## Supplemental review correction
+
+The GPT reviewer found three important races on `459a44aab`: post-exit
+output could keep resetting observation, exit 0 could be mistaken for death
+before stdio close, and harness setup/callback errors could leak a child or
+an ENOENT rejection. Four added regressions reproduced all findings (4 failed,
+11 passed, one unhandled rejection). The corrections cap post-death progress
+grace, separate clean exit from bounded output drain, and place setup/run
+inside the spawning harness's error cleanup boundary. The observer itself
+still cannot kill or restart. All 15 targeted tests now pass.
+
+The source/CLI build passed. Boot initially failed because the dependency
+install skipped embedded PostgreSQL's symlink hydration. `pnpm rebuild` did
+not hydrate this package in the workspace; running its declared
+`postinstall` script in its package directory did. PostgreSQL version
+inspection then succeeded and `pnpm smoke:boot` passed: CLI help/init,
+HTTP 200 on an ephemeral port, clean shutdown. No live service was touched.
+
 ## Remaining review state
 
 Draft PR, unmerged. Supplemental exact-revision review and source build/boot

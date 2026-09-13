@@ -53,6 +53,19 @@ describe("graph worker observer", () => {
     expect(await result).toMatchObject({ state: "worker-stuck", evidence: { progress: 1, progressAgeMs: 100 } });
   });
 
+  it("bounds post-exit pipe progress to one observation", async () => {
+    vi.useFakeTimers(); vi.setSystemTime(1_000);
+    const f = fixture();
+    const result = f.monitor.race(pending());
+    f.child.emit("exit", 1, null);
+    f.snapshot.progress = 1;
+    await vi.advanceTimersByTimeAsync(100);
+    f.snapshot.progress = 2;
+    await vi.advanceTimersByTimeAsync(100);
+    expect(f.records).toHaveLength(1);
+    expect(await result).toMatchObject({ state: "worker-stuck", observedAt: 1_200 });
+  });
+
   it("stops observing a completed graph even when its agent exits", async () => {
     vi.useFakeTimers(); vi.setSystemTime(1_000);
     const f = fixture();

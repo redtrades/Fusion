@@ -1,6 +1,9 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RenewTaskLeaseDeps } from "../executor/renew-task-lease.js";
 import { renewTaskLease } from "../executor/renew-task-lease.js";
@@ -129,6 +132,20 @@ describe("lease renewal observation", () => {
   it("serializes concurrent appends without losing renewals", async () => {
     await Promise.all(Array.from({ length: 10 }, renew));
     expect(await events()).toHaveLength(10);
+  });
+
+  it("runs the lead query in a fresh process without loading runtime build artifacts", async () => {
+    await renew();
+    const file = join(dir, "lease-audit.jsonl");
+    const before = await readFile(file, "utf8");
+    const claim = (await events())[0].claim_id;
+    const { stdout } = await promisify(execFile)(process.execPath, [
+      fileURLToPath(new URL("../../../../node_modules/tsx/dist/cli.mjs", import.meta.url)),
+      fileURLToPath(new URL("../../../../scripts/lease-audit.ts", import.meta.url)), file, claim,
+    ]);
+    expect(JSON.parse(stdout)).toMatchObject({ observation_only: true,
+      claims: [{ claim_id: claim, status: "unknown", renewals: [{ event: "lease_renewed" }] }] });
+    expect(await readFile(file, "utf8")).toBe(before);
   });
 
   it.each([false, true])("does not emit success if renewal rejects (agent store: %s)", async (agentStore) => {

@@ -121,3 +121,23 @@ dashboard is unnecessary for the read-only claim join.
 
 Next action: review the PR's exact revision and verification receipts, then
 have the lead decide integration. No merge or release is part of this task.
+
+## Verification receipt (2026-09-13)
+
+- 27 tests pass across `lease-audit.test.ts`, `executor-lease-renewal.test.ts`,
+  and `emit-bounded-run-audit.test.ts` (`engine-default` project).
+- Engine typecheck and build pass; scoped production/script ESLint,
+  changeset format, FNXC timestamps, and `git diff --check` pass.
+- The fresh-process query test reads a populated history and verifies that
+  its bytes are unchanged. The source-checkout smoke initially exposed a
+  missing core build dependency; lazy loading the observation-only GitHub
+  adapter fixes the query without requiring a core build.
+- Separate code review rejected the cached-sample implementation, then
+  confirmed the cadence correction at `ce05ba3c1`. Required
+  different-model-family acceptance remains pending with the lead.
+- HTTPS push failed for missing credentials. SSH pushed the branch to
+  `redtrades/Fusion`; the connected GitHub API opened
+  [PR #1](https://github.com/redtrades/Fusion/pull/1) and posted its link to
+  agents issue #261. No PR-triggered workflow runs were returned for
+  `ce05ba3c1`; full merge gate and authenticated deployed-runtime acceptance
+  remain unverified. No local-model inference occurred.

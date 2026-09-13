@@ -2,7 +2,7 @@ import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { PrInfo, TaskStore } from "@fusion/core";
 import { emitBoundedRunAudit } from "./emit-bounded-run-audit.js";
-import { readLeaseArtifact, type LeaseArtifact } from "./lease-artifacts.js";
+import type { LeaseArtifact } from "./lease-artifacts.js";
 type Progress = {
   status: "unknown" | "progressing" | "unchanged" | "spinning";
   zero_delta_streak: number;
@@ -101,6 +101,9 @@ export async function observeLeaseRenewal(
     await emitBoundedRunAudit({ recordRunAuditEvent: async () => {
       const task = await store.getTask(taskId);
       const prs: PrInfo[] = task.prInfos?.length ? task.prInfos : task.prInfo ? [task.prInfo] : [];
+      if (!prs.length) return;
+      // Keep the read-only JSONL query independent of the runtime/core build and GitHub adapter.
+      const { readLeaseArtifact } = await import("./lease-artifacts.js");
       artifacts = (await Promise.all([...new Set(prs.map((pr) => pr.url))].map(readLeaseArtifact)))
         .sort((a, b) => a.pr.localeCompare(b.pr));
     } }, { mutationType: "task:lease-artifacts-observed" });

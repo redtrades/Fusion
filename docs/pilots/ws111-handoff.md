@@ -23,23 +23,28 @@ See [the operational procedure](worker-stuck.md).
 
 ## Verified evidence
 
-Implementation revision: `459a44aab70e65458c2733575d19ab930db2aff2`.
+Verified implementation revision: `f630d79d78d1e5afff505c223c5f3501dd154312`.
+The final handoff-only commit does not change runtime or test files.
 
-- 11 targeted tests passed: dead/slow/unknown worker, lost exit event, expired
+- 15 targeted tests passed: dead/slow/unknown worker, lost exit event, expired
   lease, final progress drain, cancellation, persistence error, invalid poll,
-  progress regression, real SIGKILL and manual resume/collision handling.
+  progress regression, bounded post-exit output, clean-exit drain, callback
+  cleanup, spawn failure, real SIGKILL and manual resume/collision handling.
 - 26 existing graph-handler tests passed.
 - `pnpm --filter @fusion/engine typecheck`: exit 0.
 - Scoped ESLint for the source pilot and CLI: exit 0. Test files are excluded
   by the repository ESLint configuration, not silently counted as linted.
 - `pnpm test:gate`: exit 0; 448 engine-core, 203 core-unit and 72 CLI-shape
   tests passed. Its PostgreSQL lane skipped 10 tests without a configured server.
-- Separate documented CLI sequence: SIGKILL detected in **164.04 ms** against
+- `pnpm verify:fast`: exit 0, 21 steps green in 40.1 seconds, including
+  source/CLI builds, scoped typechecks, and boot smoke (CLI help/init, real
+  HTTP health 200 on an ephemeral port, clean shutdown).
+- Separate documented CLI sequence: SIGKILL detected in **174.10 ms** against
   **3,000 ms** lease; fresh lease age **0 ms**, stdout progress **7 bytes**,
-  progress age **101 ms**. Dead attempt exited 2 / `worker-stuck`; manually
+  progress age **103 ms**. Dead attempt exited 2 / `worker-stuck`; manually
   launched successor exited 0 / `completed`. Original state bytes preserved.
-- Dead attempt `3dbc9e39-62f4-4090-a8e0-18ef9812101a`; successor
-  `c6975730-25f3-400e-a344-1aa2b3c8afde`. Both traversed `start`, `work` only.
+- Dead attempt `c5fed884-4085-43cf-bc3a-a82e45b1aa5b`; successor
+  `1d89bee3-0787-4554-b022-ed05ad2e1631`. Both traversed `start`, `work` only.
   The dead attempt never traversed the authored `recover` failure edge.
 
 ## Negative evidence and limits
@@ -86,6 +91,7 @@ HTTP 200 on an ephemeral port, clean shutdown. No live service was touched.
 
 ## Remaining review state
 
-Draft PR, unmerged. Supplemental exact-revision review and source build/boot
-verification are being completed in this session. The lead owns the required
+Draft PR, unmerged. Corrected implementation is pushed and verification
+passes as recorded above. Supplemental exact-revision re-review is pending;
+its final disposition will be recorded in the PR. The lead owns the required
 different-model-family review and any later installed-runtime promotion.

@@ -303,7 +303,7 @@ A persisted crash-safe marker (`tasks.transitionPending`) written in the same Po
 
 ## Step inversion
 
-*Controlled by the default-on `experimentalFeatures.workflowGraphExecutor` flag (orthogonal to `workflowColumns`). With an explicit flag-off override, and for the Default workflow always, step policy is the legacy engine-owned path (PROMPT.md parsing, in-session review verdicts, RETHINK reset) — unchanged.*
+*Graph execution is unconditional. The `experimentalFeatures.workflowGraphExecutor` flag graduated on 2026-06-22 (`packages/core/src/config/experimental-features.ts:8-12`); stale persisted values are ignored by design and no flag-off override exists. The legacy engine-owned step path (PROMPT.md parsing, in-session review verdicts, RETHINK reset) has been deleted; every `execute()` call is graph-owned.*
 
 ### Step instance
 One runtime expansion of a `foreach` template subgraph, bound to a single planned step (`Task.steps[i]`). Identity is deterministic — `<foreachNodeId>#<stepIndex>:<templateNodeId>` — so resume reconstructs the full instance set from the pinned step count without persisting the expansion itself. Each instance carries its own run-state (current node, rework count, baseline/checkpoint, and in worktree mode its branch and integration status) in its own persisted run-state table. The step count is pinned at expansion; a later disagreement with the live step list is a `pin-mismatch` failure, never a silent re-expansion. An instance's lifecycle writes flow through `store.updateStep` so `Task.steps[]` stays the physical projection sink for every existing consumer.

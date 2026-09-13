@@ -6,6 +6,7 @@
  */
 import type { AgentStore, TaskStore } from "@fusion/core";
 import type { EngineRunContext } from "../util/run-audit.js";
+import { observeLeaseRenewal } from "../util/lease-audit.js";
 
 export type RenewTaskLeaseDeps = {
   store: TaskStore;
@@ -34,10 +35,11 @@ export async function renewTaskLease(
       },
       deps.getRunContextFor(taskId),
     );
-    return;
+  } else {
+    await deps.store.renewCheckoutLease(taskId, {
+      checkoutRunId: runId ?? null,
+      checkoutLeaseRenewedAt: renewedAt,
+    });
   }
-  await deps.store.renewCheckoutLease(taskId, {
-    checkoutRunId: runId ?? null,
-    checkoutLeaseRenewedAt: renewedAt,
-  });
+  await observeLeaseRenewal(deps.store, taskId, agentId, leaseEpoch, nodeId, runId, renewedAt);
 }

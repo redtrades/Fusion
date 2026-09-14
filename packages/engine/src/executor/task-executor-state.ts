@@ -1,3 +1,4 @@
+import type { TaskMergeRequestOptions } from "@fusion/core";
 /**
  * FNXC:CodeOrganization 2026-08-04-07:10:
  * TaskExecutor instance state fields peeled to a base class (U4) so executor.ts keeps
@@ -134,7 +135,7 @@ export abstract class TaskExecutorState {
   protected graphSeamGoverningNodeId = new Map<string, string>();
   protected graphSeamThinkingLevel = new Map<string, ThinkingLevel>();
   protected graphSeamSkillName = new Map<string, string>();
-  protected mergeRequester?: (taskId: string, options?: { signal?: AbortSignal }) => Promise<MergeResult>;
+  protected mergeRequester?: (taskId: string, options?: TaskMergeRequestOptions) => Promise<MergeResult>;
   protected sessionContentionHoldAttempts = new Map<string, number>();
   /**
    * FNXC:CodeOrganization 2026-08-04-07:40:

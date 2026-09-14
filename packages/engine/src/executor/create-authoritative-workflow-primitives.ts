@@ -1,3 +1,5 @@
+import { assertProtectedTaskMergeCurrent, assertProtectedTaskMergeSnapshot, ownProtectedTaskMergeFence, ProtectedTaskMergeRefusal, type ProtectedTaskMergeFence } from "@fusion/core";
+import type { TaskMergeRequestOptions } from "@fusion/core";
 /**
  * FNXC:CodeOrganization 2026-08-03-14:15:
  * createAuthoritativeWorkflowPrimitivesFromExecutor peeled from TaskExecutor (U4).
@@ -44,7 +46,7 @@ export type CreateAuthoritativeWorkflowPrimitivesDeps = {
   graphStepActiveContext: Map<string, unknown>;
   pausedAborted: Set<string>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- merge requester accepts optional signal bag
-  mergeRequester?: ((taskId: string, opts?: any) => Promise<any>) | null;
+  mergeRequester?: ((taskId: string, opts?: TaskMergeRequestOptions) => Promise<any>) | null;
   getRunContextFor: (taskId: string) => EngineRunContext | undefined;
   buildParseStepsDeps: AnyFn;
   createAuthoritativeWorkflowSeams: AnyFn;
@@ -355,7 +357,21 @@ export function createAuthoritativeWorkflowPrimitivesFromExecutor(
         }
         return { outcome: "success", value: input.reason };
       },
-      requestMerge: async (ctx, task) => {
+      requestMerge: async (ctx, task, input) => {
+        try {
+        let protectedMerge: ProtectedTaskMergeFence | undefined;
+        if (ctx.node.node.config?.requireProtectedMerge === true || input?.expectedHeadOid !== undefined || input?.admission !== undefined) {
+          const admission = input?.admission ?? {runId:task.checkoutRunId!,leaseEpoch:task.checkoutLeaseEpoch!,agentId:task.checkedOutBy!,nodeId:task.checkoutNodeId!};
+          const selected = await deps.store.getTaskWorkflowSelectionAsync(task.id);
+          const definition = selected && await deps.store.getWorkflowDefinition(selected.workflowId);
+          if (!selected || !definition || (input?.workflowId !== undefined && input.workflowId !== selected.workflowId)
+              || (ctx.run.workflowId !== selected.workflowId && ctx.run.workflowId !== definition.ir.name)) {
+            throw new ProtectedTaskMergeRefusal("merge-request-superseded");
+          }
+          protectedMerge = ownProtectedTaskMergeFence({expectedHeadOid:input?.expectedHeadOid!,admission,workflowId:selected.workflowId,expectedColumn:task.column});
+          assertProtectedTaskMergeSnapshot(task,selected.workflowId,protectedMerge);
+          await assertProtectedTaskMergeCurrent(deps.store,task.id,protectedMerge,ctx.signal);
+        }
         if (!deps.mergeRequester) {
           return { outcome: "failure", value: "merge-unavailable", data: { status: "failed", reason: "merge-unavailable" } };
         }
@@ -382,6 +398,11 @@ export function createAuthoritativeWorkflowPrimitivesFromExecutor(
           return { outcome: "failure", value: MERGE_BOUNDARY_UNPROVEN_VALUE };
         }
         const mergeTask = mergeBoundary.task;
+        if (protectedMerge) {
+          // FNXC:ProtectedMerge 2026-09-14-06:42: Only the legitimate boundary column may change; never borrow its replacement owner.
+          protectedMerge = ownProtectedTaskMergeFence({...protectedMerge,expectedColumn:mergeTask.column});
+          await assertProtectedTaskMergeCurrent(deps.store,mergeTask.id,protectedMerge,ctx.signal);
+        }
         /*
         FNXC:WorkflowMerge 2026-06-29-23:18:
         FN-7261 reached the merge node in fast mode with every legacy implementation step still pending, producing a no-op merge proof for work that never ran. A graph-native workflow may project its checklist at the merge boundary only when node workflow results prove implementation completed; otherwise incomplete legacy steps are authoritative and merge must fail before the merger can create stale no-op proof.
@@ -438,7 +459,7 @@ export function createAuthoritativeWorkflowPrimitivesFromExecutor(
           ctx.signal.addEventListener("abort", onGraphAbort, { once: true });
         });
         try {
-          const result = await Promise.race([deps.mergeRequester(mergeTask.id, { signal: mergeSignal }), timeout, cancelled]);
+          const result = await Promise.race([deps.mergeRequester(mergeTask.id, { signal: mergeSignal, ...(protectedMerge ? {protectedMerge} : {}) }), timeout, cancelled]);
           if (result === "cancelled") {
             executorLog.warn(`${mergeTask.id}: workflow merge primitive cancelled by graph abort`);
             return { outcome: "failure", value: "merge-cancelled" };
@@ -446,6 +467,13 @@ export function createAuthoritativeWorkflowPrimitivesFromExecutor(
           if (result === "timeout") {
             executorLog.warn(`${mergeTask.id}: workflow merge primitive timed out after ${GRAPH_MERGE_TIMEOUT_MS}ms`);
             return { outcome: "failure", value: "merge-timeout", data: { status: "timeout" } };
+          }
+          if (protectedMerge) {
+            // The protected native PR processor already committed its fenced completion; never run a second finalizer.
+            if (result.merged) return {outcome:"success",value:"merged",data:{status:"merged"}};
+            if (result.reason === "manual-required") return {outcome:"success",value:"manual-required",data:{status:"manual-required"}};
+            if (result.reason === "merged-requested") return {outcome:"success",value:"merged-requested",data:{status:"merged-requested"}};
+            return {outcome:"failure",value:"merge-authority-unavailable",data:{status:"failed",reason:"merge-authority-unavailable"}};
           }
           if (result.merged || result.noOp) {
             /*
@@ -495,6 +523,10 @@ export function createAuthoritativeWorkflowPrimitivesFromExecutor(
             type: "merge-requested",
             message: `Workflow node ${ctx.node.node.id} requested merge`,
           });
+        }
+        } catch (error) {
+          if (error instanceof ProtectedTaskMergeRefusal) return {outcome:"failure",value:error.code,data:{status:"failed",reason:error.code}};
+          throw error;
         }
       },
       abortRun: async (_ctx, task, input) => {

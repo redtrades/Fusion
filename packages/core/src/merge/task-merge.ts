@@ -4,6 +4,50 @@ import type { BranchGroup, Settings, Task, WorkflowStepResult } from "../types.j
 import type { MergeContentDescriptor } from "./merge-content-descriptor.js";
 import { evaluatePreMergeApprovals } from "./pre-merge-approval.js";
 
+/** FNXC:ProtectedMerge 2026-09-14-06:42: Preserve the reviewed head and native owner across async merge work. */
+export interface ProtectedTaskMergeFence {
+  expectedHeadOid: string;
+  admission: { runId: string; leaseEpoch: number; agentId: string; nodeId: string };
+  workflowId: string;
+  expectedColumn: string;
+}
+export interface TaskMergeRequestOptions { signal?: AbortSignal; protectedMerge?: ProtectedTaskMergeFence; }
+export class ProtectedTaskMergeRefusal extends Error {
+  constructor(readonly code: "stale-head" | "merge-request-superseded" | "merge-authority-unavailable") {
+    super(code); this.name = "ProtectedTaskMergeRefusal";
+  }
+}
+export function ownProtectedTaskMergeFence(value: ProtectedTaskMergeFence): ProtectedTaskMergeFence {
+  const bounded = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0 && v.length <= 512;
+  if (!value || typeof value.expectedHeadOid !== "string" || !/^[a-f0-9]{40,64}$/i.test(value.expectedHeadOid)
+      || !bounded(value.workflowId) || !bounded(value.expectedColumn) || !value.admission
+      || ![value.admission.runId,value.admission.agentId,value.admission.nodeId].every(bounded)
+      || !Number.isSafeInteger(value.admission.leaseEpoch) || value.admission.leaseEpoch < 1) {
+    throw new ProtectedTaskMergeRefusal("merge-authority-unavailable");
+  }
+  return Object.freeze({ expectedHeadOid:value.expectedHeadOid, workflowId:value.workflowId, expectedColumn:value.expectedColumn,
+    admission:Object.freeze({runId:value.admission.runId,leaseEpoch:value.admission.leaseEpoch,agentId:value.admission.agentId,nodeId:value.admission.nodeId}) });
+}
+export function assertProtectedTaskMergeSnapshot(task: Task | null | undefined, workflowId: string | null | undefined, fence: ProtectedTaskMergeFence): void {
+  ownProtectedTaskMergeFence(fence);
+  const a = fence.admission;
+  if (!task || task.deletedAt || task.paused || task.userPaused || task.column !== fence.expectedColumn || workflowId !== fence.workflowId
+      || task.checkoutRunId !== a.runId || task.checkoutLeaseEpoch !== a.leaseEpoch
+      || task.checkedOutBy !== a.agentId || task.checkoutNodeId !== a.nodeId) {
+    throw new ProtectedTaskMergeRefusal("merge-request-superseded");
+  }
+}
+export async function assertProtectedTaskMergeCurrent(
+  store: Pick<import("../store.js").TaskStore,"getTask"|"getTaskWorkflowSelectionAsync">,
+  taskId: string, fence: ProtectedTaskMergeFence, signal?: AbortSignal,
+): Promise<void> {
+  if (signal?.aborted) throw new ProtectedTaskMergeRefusal("merge-request-superseded");
+  const selection = await store.getTaskWorkflowSelectionAsync(taskId);
+  const task = await store.getTask(taskId);
+  if (signal?.aborted) throw new ProtectedTaskMergeRefusal("merge-request-superseded");
+  assertProtectedTaskMergeSnapshot(task, selection?.workflowId, fence);
+}
+
 export interface LandedMemberReviewAdvisory {
   taskId: string;
   workflowStepId: string;

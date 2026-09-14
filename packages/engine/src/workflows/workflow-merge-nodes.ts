@@ -1,3 +1,5 @@
+import { ownProtectedTaskMergeFence, ProtectedTaskMergeRefusal } from "@fusion/core";
+import { PROTECTED_WORKFLOW_MERGE_CONTEXT_KEY, type ProtectedWorkflowMergeContextProof, type MergePrimitiveInput } from "../execution/runtime-primitives.js";
 import type { TaskDetail } from "@fusion/core";
 import type { MergePrimitiveResult, WorkflowPrimitiveContext, WorkflowRuntimePrimitives } from "../execution/runtime-primitives.js";
 import type { WorkflowNodeResult } from "./workflow-graph-executor.js";
@@ -5,7 +7,7 @@ import type { WorkflowNodeResult } from "./workflow-graph-executor.js";
 /** A terminal graph value: retrying cannot create missing merge-boundary proof. */
 export const MERGE_BOUNDARY_UNPROVEN_VALUE = "merge-boundary-unproven";
 
-export const PRESERVED_MERGE_FAILURE_REASONS = new Set(["implementation-incomplete", "merge-unavailable", "workspace-review-required"]);
+export const PRESERVED_MERGE_FAILURE_REASONS = new Set(["implementation-incomplete", "merge-unavailable", "workspace-review-required", "stale-head", "merge-request-superseded", "merge-authority-unavailable"]);
 
 export interface WorkflowMergeNodeDeps {
   primitives: Pick<WorkflowRuntimePrimitives, "requestMerge" | "audit">;
@@ -16,7 +18,24 @@ export async function runWorkflowMergeAttemptNode(
   ctx: WorkflowPrimitiveContext,
   task: TaskDetail,
 ): Promise<WorkflowNodeResult> {
-  const result = await deps.primitives.requestMerge(ctx, task);
+  let input: MergePrimitiveInput | undefined;
+  if (ctx.node.node.config?.requireProtectedMerge === true) {
+    const proof = ctx.node.context?.[PROTECTED_WORKFLOW_MERGE_CONTEXT_KEY] as ProtectedWorkflowMergeContextProof | undefined;
+    if (!proof || typeof proof !== "object") return {outcome:"failure",value:"merge-authority-unavailable"};
+    if (proof.taskId !== task.id || proof.taskId !== ctx.run.taskId || proof.runId !== ctx.run.runId) {
+      return {outcome:"failure",value:"merge-request-superseded"};
+    }
+    try {
+      const owned = ownProtectedTaskMergeFence({expectedHeadOid:proof.expectedHeadOid,admission:proof.admission,workflowId:proof.workflowId,expectedColumn:task.column});
+      input = {expectedHeadOid:owned.expectedHeadOid,admission:owned.admission,workflowId:owned.workflowId};
+    } catch (error) {
+      if (error instanceof ProtectedTaskMergeRefusal) return {outcome:"failure",value:error.code};
+      throw error;
+    }
+  }
+  const result = input
+    ? await deps.primitives.requestMerge(ctx, task, input)
+    : await deps.primitives.requestMerge(ctx, task);
   const classified = classifyMergePrimitiveResult(result.data, result.value, result.outcome);
   try {
     await deps.primitives.audit(ctx, {

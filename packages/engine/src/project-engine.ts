@@ -1,3 +1,5 @@
+import { assertProtectedTaskMergeCurrent, ownProtectedTaskMergeFence, ProtectedTaskMergeRefusal, type ProtectedTaskMergeFence, type TaskMergeRequestOptions } from "@fusion/core";
+import { isDeepStrictEqual } from "node:util";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type {
   WorkflowIr,
@@ -194,6 +196,7 @@ export type ProcessPullRequestMergeFn = (
   taskId: string,
   /** Propagates merge-queue cancellation into refresh git mutations. */
   signal?: AbortSignal,
+  protectedMerge?: ProtectedTaskMergeFence,
 ) => Promise<"merged" | "waiting" | "skipped">;
 
 const execFileAsync = promisify(execFile);
@@ -479,7 +482,7 @@ export interface ProjectEngineOptions {
  * via ProjectManager) gets the full subsystem set, eliminating the class of
  * bugs where a subsystem is forgotten in one code path.
  */
-type MergeResolver = { resolve: (result: MergeResult) => void; reject: (err: Error) => void };
+type MergeResolver = { protectedMerge?: ProtectedTaskMergeFence; resolve: (result: MergeResult) => void; reject: (err: Error) => void };
 
 export class ProjectEngine {
   private runtime: InProcessRuntime;
@@ -2649,8 +2652,14 @@ export class ProjectEngine {
    * Returns the full MergeResult so it can be used as the `onMerge` callback
    * in createServer().
    */
-  async onMerge(taskId: string, options: { signal?: AbortSignal } = {}): Promise<MergeResult> {
+  async onMerge(taskId: string, options: TaskMergeRequestOptions = {}): Promise<MergeResult> {
     const signal = options.signal;
+    const protectedMerge = options.protectedMerge === undefined ? undefined : ownProtectedTaskMergeFence(options.protectedMerge);
+    const waiting = this.manualMergeResolvers.get(taskId) ?? this.capacityDeferredMerges.get(taskId)?.resolvers ?? [];
+    if ((this.mergeActive.has(taskId) || this.capacityDeferredMergeTaskIds.has(taskId) || waiting.length > 0)
+        && !isDeepStrictEqual(waiting[0]?.protectedMerge, protectedMerge)) {
+      throw new ProtectedTaskMergeRefusal("merge-request-superseded");
+    }
     if (signal?.aborted) {
       throw new Error(`Merge request for ${taskId} aborted`);
     }
@@ -2661,7 +2670,7 @@ export class ProjectEngine {
     // stale callback cannot repeat a merge that the operator already completed.
     this.clearPrMergeRetryTimer(taskId);
     const existing = await store.getTask(taskId);
-    if (existing?.status === "awaiting-approval") {
+    if (!protectedMerge && existing?.status === "awaiting-approval") {
       /*
       FNXC:PullRequestMerge 2026-08-09-02:39:
       A branch-policy hold is operator-resumable only through this manual merge
@@ -2682,6 +2691,7 @@ export class ProjectEngine {
         signal?.removeEventListener("abort", abort);
       };
       const resolver: MergeResolver = {
+        protectedMerge,
         resolve: (result) => {
           if (settled) return;
           settled = true;
@@ -2718,6 +2728,11 @@ export class ProjectEngine {
         resolver.reject(new Error(`Merge request for ${taskId} aborted`));
       };
 
+      const pending = this.manualMergeResolvers.get(taskId) ?? this.capacityDeferredMerges.get(taskId)?.resolvers ?? [];
+      if ((this.mergeActive.has(taskId) || this.capacityDeferredMergeTaskIds.has(taskId) || pending.length > 0)
+          && !isDeepStrictEqual(pending[0]?.protectedMerge, protectedMerge)) {
+        reject(new ProtectedTaskMergeRefusal("merge-request-superseded")); return;
+      }
       signal?.addEventListener("abort", abort, { once: true });
       this.addMergeResolver(taskId, resolver);
 
@@ -2740,7 +2755,13 @@ export class ProjectEngine {
    * it as "manual merge required" and parks the task in review — preserving the
    * contract that autoMerge-off leaves in-review terminal until a human merges.
    */
-  async requestInterpreterMerge(taskId: string, options: { signal?: AbortSignal } = {}): Promise<MergeResult> {
+  private async workflowRequiresProtectedMerge(store: TaskStore, taskId: string): Promise<boolean> {
+    const selected = await store.getTaskWorkflowSelectionAsync?.(taskId);
+    const definition = selected && await store.getWorkflowDefinition?.(selected.workflowId);
+    return definition?.ir?.nodes.some(node => node.kind === "merge-attempt" && node.config?.requireProtectedMerge === true) === true;
+  }
+
+  async requestInterpreterMerge(taskId: string, options: TaskMergeRequestOptions = {}): Promise<MergeResult> {
     let task: Task | null = null;
     let settings: Settings | undefined;
     const store = this.runtime.getTaskStore();
@@ -2753,6 +2774,12 @@ export class ProjectEngine {
     /* FNXC:WorkflowLifecycleColumns 2026-08-01-19:15 (fleet): merge eligibility asks whether the card is in
        ITS board's merge lane. With the literal, no card on a renamed board was ever eligible — auto-merge
        did not fail, it declined every card, which is why this class of defect has no error signature. */
+    if (!options.protectedMerge && await this.workflowRequiresProtectedMerge(store,taskId)) {
+      if (this.manualMergeResolvers.get(taskId)?.some(resolver => resolver.protectedMerge)) {
+        throw new ProtectedTaskMergeRefusal("merge-request-superseded");
+      }
+      throw new ProtectedTaskMergeRefusal("merge-authority-unavailable");
+    }
     const eligibleReviewColumn = task
       ? (await resolveTaskLifecycleColumns(store, task.id))?.review ?? "in-review"
       : "in-review";
@@ -4170,6 +4197,7 @@ export class ProjectEngine {
         // don't start a merge whose queue entry was cleared by stop().
         if (this.shuttingDown) break;
         const hasManualResolver = this.hasMergeResolvers(taskId);
+        const protectedMerge = this.manualMergeResolvers.get(taskId)?.[0]?.protectedMerge;
         /*
         FNXC:MergeQueue 2026-08-28-09:29:
         Waiting-caller dispatches deliberately skip the merge-confirmed fast path in the automatic
@@ -4179,6 +4207,10 @@ export class ProjectEngine {
         direct CLI callers, and automatic retries.
         */
         try {
+          // FNXC:ProtectedMerge 2026-09-14-06:42: Listeners and sweeps cannot synthesize protected graph permission.
+          if (!protectedMerge && !hasManualResolver && await this.workflowRequiresProtectedMerge(store,taskId)) {
+            throw new ProtectedTaskMergeRefusal("merge-authority-unavailable");
+          }
           // Manual merges (onMerge) skip auto-merge eligibility checks
           if (!hasManualResolver) {
             // Re-check autoMerge and pause before each merge
@@ -4591,6 +4623,7 @@ export class ProjectEngine {
             }
           }
 
+          if (protectedMerge) await assertProtectedTaskMergeCurrent(store,taskId,protectedMerge);
           const settings = await store.getSettings();
 
           // Cross-process guard: check if another process is already merging a
@@ -4619,6 +4652,7 @@ export class ProjectEngine {
           }
 
           const mergeStrategy = this.options.getMergeStrategy?.(settings) ?? "direct";
+          if (protectedMerge && mergeStrategy !== "pull-request") throw new ProtectedTaskMergeRefusal("merge-authority-unavailable");
           const promotionSettings = {
             autoMerge: settings.autoMerge,
             globalPause: settings.globalPause,
@@ -4870,6 +4904,7 @@ export class ProjectEngine {
                     cwd,
                     taskId,
                     abortSignal,
+                    protectedMerge,
                   ),
                 abortSignal,
                 taskId,
@@ -4883,7 +4918,7 @@ export class ProjectEngine {
               deferMergeForCapacity();
               break;
             }
-            if (result === "merged") {
+            if (result === "merged" && !protectedMerge) {
               runtimeLog.log(`${hasManualResolver ? "Manual" : "Auto"}-merge PR merged: ${taskId}`);
               const mergedTask = await store.getTask(taskId).catch(() => null);
               if (mergedTask) {
@@ -4923,6 +4958,7 @@ export class ProjectEngine {
                 task: prTask!,
                 branch: prTask?.branch ?? "",
                 merged: result === "merged",
+                ...(result === "waiting" ? {reason:"merged-requested"} : result === "skipped" ? {reason:"merge-authority-unavailable"} : {}),
                 worktreeRemoved: false,
                 branchDeleted: false,
               } as MergeResult);
@@ -5107,6 +5143,12 @@ export class ProjectEngine {
           this.activeMergeSession = null;
           const errorMsg = err instanceof Error ? err.message : String(err);
           const mergeWasAborted = err instanceof Error && err.name === "MergeAbortedError";
+          // FNXC:ProtectedMerge 2026-09-14-06:42: An old request cannot repair, retry, or mutate its replacement owner.
+          if (err instanceof ProtectedTaskMergeRefusal || (protectedMerge && err instanceof Error)) {
+            this.clearPrMergeRetryTimer(taskId);
+            if (hasManualResolver) this.rejectMergeResolvers(taskId,err);
+            continue;
+          }
 
           if (mergeWasAborted) {
             runtimeLog.log(`${hasManualResolver ? "Manual" : "Auto"}-merge aborted for ${taskId}: ${errorMsg}`);

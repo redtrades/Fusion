@@ -1,3 +1,4 @@
+import { assertProtectedTaskMergeCurrent, ownProtectedTaskMergeFence, ProtectedTaskMergeRefusal, type ProtectedTaskMergeFence } from "@fusion/core";
 /**
  * Shared task lifecycle helpers for PR merge workflows.
  *
@@ -93,6 +94,7 @@ interface GitHubOperations {
   createPr(params: { owner?: string; repo?: string; title: string; body: string; head: string; base?: string }): Promise<PrInfo>;
   getPrMergeStatus(owner?: string, repo?: string, number?: number, options?: { requiredCheckNames?: string[]; resolveIngestedChecks?: (input: { owner: string; repo: string; headSha: string }) => Promise<IngestedCheckState[]> }): Promise<{
     prInfo: PrInfo;
+    headOid?: string;
     reviewDecision: string | null;
     checks: Array<{ name: string; required: boolean; state: string }>;
     mergeReady: boolean;
@@ -1134,10 +1136,18 @@ async function finalizePullRequestMerge(
   task: TaskDetail,
   prInfo: PrInfo,
   message = "Pull request merged",
+  protectedMerge?: ProtectedTaskMergeFence,
+  signal?: AbortSignal,
 ): Promise<void> {
-  await cleanupMergedTaskArtifacts(cwd, task);
-  await store.updateTask(task.id, { status: null, mergeRetries: 0 });
-  const movedTask = await store.moveTask(task.id, await resolveCompleteTargetForTask(store, task.id));
+  // FNXC:ProtectedMerge 2026-09-14-06:42: Commit the native owner-fenced completion before cleanup or close events.
+  if (protectedMerge) await assertProtectedTaskMergeCurrent(store,task.id,protectedMerge,signal);
+  else {
+    await cleanupMergedTaskArtifacts(cwd, task);
+    await store.updateTask(task.id, { status: null, mergeRetries: 0 });
+  }
+  const movedTask = await store.moveTask(task.id, await resolveCompleteTargetForTask(store, task.id),
+    protectedMerge ? {protectedMerge} : undefined);
+  if (protectedMerge) await cleanupMergedTaskArtifacts(cwd,task);
   const mergedTask = movedTask ?? (await store.getTask(task.id));
   await store.logEntry(task.id, message, `PR #${prInfo.number}: ${prInfo.url}`);
   const settings = await store.getSettings();
@@ -1234,8 +1244,15 @@ export async function processPullRequestMergeTask(
   github: GitHubOperations,
   getTaskMergeBlocker: TaskMergeBlockerFn,
   signal?: AbortSignal,
+  protectedInput?: ProtectedTaskMergeFence,
 ): Promise<ProcessPullRequestResult> {
+  const protectedMerge = protectedInput === undefined ? undefined : ownProtectedTaskMergeFence(protectedInput);
+  const guard = async () => { if (protectedMerge) await assertProtectedTaskMergeCurrent(store,taskId,protectedMerge,signal); };
+  await guard();
   const task = await store.getTask(taskId);
+  if (protectedMerge && (!task.prInfo || task.branchContext?.groupId || isWorkspaceTask(task))) {
+    throw new ProtectedTaskMergeRefusal("merge-authority-unavailable");
+  }
   /*
   FNXC:WorkflowResolvedColumns 2026-07-30-23:55:
   Hand the merge blocker THIS task's merge lane, or PR merges never run on a renamed board.
@@ -1263,6 +1280,7 @@ export async function processPullRequestMergeTask(
      `scripts/lib/lane-wiring-census.mjs`, which matches an object-literal argument and cannot see a
      ternary. Wiring the gate cannot check is how this defect survived in the first place. */
   if (getTaskMergeBlocker(task, { reviewColumns: mergeLane ? new Set([mergeLane]) : undefined })) {
+    if (protectedMerge) throw new ProtectedTaskMergeRefusal("merge-authority-unavailable");
     return "skipped";
   }
 
@@ -1305,9 +1323,18 @@ export async function processPullRequestMergeTask(
   }
   const requiredCheckNames = resolveRequiredCheckNames(settings);
   const ingestedCheckResolver = createIngestedCheckResolver(store.getAsyncLayer?.());
-  const getPrMergeStatus = (number: number) => requiredCheckNames.length > 0
-    ? github.getPrMergeStatus(prRepo.owner, prRepo.repo, number, { requiredCheckNames, ...(ingestedCheckResolver ? { resolveIngestedChecks: ingestedCheckResolver } : {}) })
-    : github.getPrMergeStatus(prRepo.owner, prRepo.repo, number);
+  const getPrMergeStatus = async (number: number) => {
+    const status = requiredCheckNames.length > 0
+      ? await github.getPrMergeStatus(prRepo.owner, prRepo.repo, number, { requiredCheckNames, ...(ingestedCheckResolver ? { resolveIngestedChecks: ingestedCheckResolver } : {}) })
+      : await github.getPrMergeStatus(prRepo.owner, prRepo.repo, number);
+    await guard();
+    if (protectedMerge) {
+      if (!status.headOid) throw new ProtectedTaskMergeRefusal("merge-authority-unavailable");
+      if (status.headOid !== protectedMerge.expectedHeadOid) throw new ProtectedTaskMergeRefusal("stale-head");
+      return {...status, prInfo: {...status.prInfo, headOid: status.headOid}};
+    }
+    return status;
+  };
   const resolvedIntegrationBranch = await resolveIntegrationBranch(cwd, settings);
   const projectDefaultBranch = resolvedIntegrationBranch;
 
@@ -1418,7 +1445,7 @@ export async function processPullRequestMergeTask(
       return "merged";
     }
 
-    const nativeAutoMerge = settings.githubNativeAutoMerge === true;
+    const nativeAutoMerge = settings.githubNativeAutoMerge === true && !protectedMerge;
     if (settings.requirePrApproval && mergeStatus.reviewDecision !== "APPROVED") {
       await store.updateTask(task.id, { status: "awaiting-pr-checks" });
       return "waiting";
@@ -1467,7 +1494,7 @@ export async function processPullRequestMergeTask(
     throwIfRefreshAborted(signal);
     const mergedPr = await github.mergePr({
       owner: prRepo.owner, repo: prRepo.repo, number: refreshedPrInfo.number, method: "squash",
-      ...(nativeAutoMerge ? { auto: true } : { expectedHeadOid: refreshedHead.headOid }),
+      ...(protectedMerge ? {expectedHeadOid:protectedMerge.expectedHeadOid} : nativeAutoMerge ? { auto: true } : { expectedHeadOid: refreshedHead.headOid }),
     });
     await store.updateBranchGroup(branchGroup.id, {
       prNumber: mergedPr.number,
@@ -1569,7 +1596,7 @@ export async function processPullRequestMergeTask(
   await store.updatePrInfo(task.id, refreshedPrInfo);
 
   if (mergeStatus.prInfo.status === "merged") {
-    await finalizePullRequestMerge(store, cwd, task, prInfo, "Pull request merged");
+    await finalizePullRequestMerge(store, cwd, task, prInfo, "Pull request merged", protectedMerge, signal);
     return "merged";
   }
 
@@ -1579,7 +1606,7 @@ export async function processPullRequestMergeTask(
   // immediately. `requirePrApproval` lets users keep PR mode as "open the
   // PR, wait for me to approve and merge it" by holding the merge until
   // reviewDecision === "APPROVED".
-  const nativeAutoMerge = settings.githubNativeAutoMerge === true;
+  const nativeAutoMerge = settings.githubNativeAutoMerge === true && !protectedMerge;
   if (settings.requirePrApproval && mergeStatus.reviewDecision !== "APPROVED") {
     await store.updateTask(task.id, { status: "awaiting-pr-checks" });
     return "waiting";
@@ -1624,6 +1651,8 @@ export async function processPullRequestMergeTask(
     integrationRemote: settings.worktreeRebaseRemote,
     signal,
   });
+  await guard();
+  if (protectedMerge && refreshedHead.headOid !== protectedMerge.expectedHeadOid) throw new ProtectedTaskMergeRefusal("stale-head");
   const latestMergeStatus = refreshedHead.refreshed
     ? await getPrMergeStatus(prInfo.number) ?? mergeStatus
     : mergeStatus;
@@ -1654,12 +1683,16 @@ export async function processPullRequestMergeTask(
   await store.updateTask(task.id, { status: "merging-pr" });
   let mergedPr: PrInfo;
   try {
+    await guard();
     throwIfRefreshAborted(signal);
     mergedPr = await github.mergePr({
       owner: prRepo.owner, repo: prRepo.repo, number: prInfo.number, method: "squash",
-      ...(nativeAutoMerge ? { auto: true } : { expectedHeadOid: refreshedHead.headOid }),
+      ...(protectedMerge ? {expectedHeadOid:protectedMerge.expectedHeadOid} : nativeAutoMerge ? { auto: true } : { expectedHeadOid: refreshedHead.headOid }),
     });
   } catch (err: unknown) {
+    if (protectedMerge && (err instanceof ProtectedTaskMergeRefusal || (err as {code?:unknown})?.code === "stale-head")) {
+      throw err instanceof ProtectedTaskMergeRefusal ? err : new ProtectedTaskMergeRefusal("stale-head");
+    }
     let refreshedStatus: Awaited<ReturnType<GitHubOperations["getPrMergeStatus"]>>;
     try {
       refreshedStatus = await getPrMergeStatus(prInfo.number);
@@ -1680,6 +1713,7 @@ export async function processPullRequestMergeTask(
         task,
         refreshedAfterFailure,
         "Pull request already merged after merge command failed; reconciled task state from GitHub",
+        protectedMerge, signal,
       );
       return "merged";
     }
@@ -1697,12 +1731,16 @@ export async function processPullRequestMergeTask(
     });
     throw Object.assign(new Error(diagnosis.message), { code: diagnosis.code, cause: diagnosis.cause });
   }
+  if (protectedMerge) {
+    await guard();
+    if (mergedPr.status === "merged") mergedPr = (await getPrMergeStatus(prInfo.number)).prInfo;
+  }
   await store.updatePrInfo(task.id, { ...mergedPr, lastCheckedAt: new Date().toISOString() });
   /* FNXC:PrMergeAutoMerge 2026-08-09-09:28: Leave native auto-merge requests open until polling confirms GitHub merged them. */
   if (mergedPr.status !== "merged") {
     await store.updateTask(task.id, { status: "awaiting-pr-checks" });
     return "waiting";
   }
-  await finalizePullRequestMerge(store, cwd, task, mergedPr, "Pull request merged");
+  await finalizePullRequestMerge(store, cwd, task, mergedPr, "Pull request merged", protectedMerge, signal);
   return "merged";
 }

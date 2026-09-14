@@ -438,6 +438,8 @@ export interface PrReviewSnapshot {
 
 export interface PrMergeStatus {
   prInfo: PrInfo;
+  /** FNXC:ProtectedMerge 2026-09-14-06:42: Authoritative PR head, including merged confirmations. */
+  headOid?: string;
   reviewDecision: ReviewDecision;
   checks: PrCheckStatus[];
   mergeable: PrConflictState;
@@ -1919,6 +1921,7 @@ export class GitHubClient {
 
     return {
       prInfo,
+      headOid: pr.headRefOid,
       reviewDecision: pr.reviewDecision ?? null,
       checks: effectiveChecks,
       mergeable,
@@ -2094,6 +2097,7 @@ export class GitHubClient {
 
     return {
       prInfo,
+      headOid: pr.headRefOid ?? undefined,
       reviewDecision: pr.reviewDecision,
       checks: effectiveChecks,
       mergeable,

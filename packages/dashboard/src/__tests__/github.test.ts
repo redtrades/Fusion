@@ -1692,6 +1692,7 @@ describe("GitHubClient", () => {
           number: 42,
           url: "https://github.com/owner/repo/pull/42",
           title: "Ready PR",
+          headRefOid: "1".repeat(40),
           state: "OPEN",
           reviewDecision: "APPROVED",
           mergeable: "MERGEABLE",
@@ -1706,6 +1707,7 @@ describe("GitHubClient", () => {
 
       const result = await client.getPrMergeStatus("owner", "repo", 42);
 
+      expect(result.headOid).toBe("1".repeat(40));
       expect(result.mergeReady).toBe(true);
       expect(result.mergeable).toBe("clean");
       expect(result.prInfo.mergeable).toBe("clean");
@@ -1820,6 +1822,7 @@ describe("GitHubClient", () => {
                 number: 42,
                 url: "https://github.com/owner/repo/pull/42",
                 title: "Branch-protected PR",
+                headRefOid: "2".repeat(40),
                 state: "OPEN",
                 reviewDecision: "REVIEW_REQUIRED",
                 mergeable: "MERGEABLE",
@@ -1874,6 +1877,7 @@ describe("GitHubClient", () => {
       global.fetch = mockFetch as any;
 
       const result = await clientWithToken.getPrMergeStatus("owner", "repo", 42);
+      expect(result.headOid).toBe("2".repeat(40));
 
       expect(result.mergeReady).toBe(false);
       expect(result.mergeable).toBe("blocked");

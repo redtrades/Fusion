@@ -1,0 +1,42 @@
+[
+  {
+    "file": "REPORT.md.gz",
+    "rawSha256": "69850c203ef64bcb49caa96620ea76e0635bedfd1a22ba89209ff400d586d9c4",
+    "gzipSha256": "1ce0b5dcc75942a8128d3e91b49b732f1e3b3704255f53d87d8f0d94a52f5faa"
+  },
+  {
+    "file": "manifest-after.json.gz",
+    "rawSha256": "a6f4977ba570ed6ada6629719717fc300827a18a89fa2174c501681187bc8bf3",
+    "gzipSha256": "2a6be5243f56bf1a76c7bb095cac404383852607a83bf110731a2aca27bc1b5f"
+  },
+  {
+    "file": "manifest-before.json.gz",
+    "rawSha256": "652fd281187d440f9e35e0618e16e5080194aa0a7f608922b973314d6b731306",
+    "gzipSha256": "7376d4e93c93d6fcbbab05182172692d4385474c77312c904b875937416a4787"
+  },
+  {
+    "file": "result.log.gz",
+    "rawSha256": "6c68a150fdd8859f4d3eaa89da4fab9afcc036e503afe6ba8b86788773e26fc2",
+    "gzipSha256": "45169c3f3857048a7c6bfade9100fe9cc525e468d708542ba6061dae696e957d"
+  },
+  {
+    "file": "result2.log.gz",
+    "rawSha256": "d2d1ed7a97d46e1d930cdc3d074b0bbd4ed030bbeb8e53f18fcbc919df7d1c72",
+    "gzipSha256": "2675d8adfac4bc44e82267cacb401491deeb0070a3190c3959f6f4ce420f85d1"
+  },
+  {
+    "file": "run.mjs.gz",
+    "rawSha256": "864a819385129c475a05f776028725a63503b6360e4afc70294d2d6b247463c0",
+    "gzipSha256": "8d71948acf1b895905f81e83ed4e11b5b9013437f2cd9c14e2c452b428006ed4"
+  },
+  {
+    "file": "task-merge-route.pg.test.ts.gz",
+    "rawSha256": "fa6cff4b8820d5cc88fcfa065edd6a30d4b89804f066b53d0e81cdbd1b5192b1",
+    "gzipSha256": "e67ad95b810990d716152e7efb6163445341830b924fd1455ffac765c66118fe"
+  },
+  {
+    "file": "vitest.config.mts.gz",
+    "rawSha256": "4f9222bee13a5af3ba878a6cc0a9ddcb8169ff6f7186873393eec7d3cacd5dd2",
+    "gzipSha256": "b7b52d26f0aba5090401f4b239c555505d58c81da98ee4049af3c238389bea9a"
+  }
+]

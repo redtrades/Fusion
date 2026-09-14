@@ -1,0 +1,9 @@
+
+ RUN  v4.1.10 /Users/man/worktrees/Fusion/300-live-integration/packages/cli
+
+
+ Test Files  1 passed (1)
+      Tests  79 passed (79)
+   Start at  02:19:07
+   Duration  10.13s (transform 7.07s, setup 98ms, import 9.83s, tests 86ms, environment 0ms)
+

@@ -86,3 +86,24 @@ task in the allTasks input. No engine admission or pause-counting policy changed
 Root owns exact-revision different-family review, integration, broader build/gate
 checks and eventual live acceptance. This local implementation is not its own
 independent review, a native resume authorization UI, or a full #300 closure.
+
+## Follow-up: durable disposition integration correction
+
+Root found a producer/consumer mismatch before independent review of 98d7409f1.
+Verified the agents writer at f329db5532ef43c2664214367b73f1c04ff586f8,
+`tools/procedure-engine/live/terminal-binding.mjs:23–24`: it removes the input
+operatorColumn and persists terminalBlock.disposition. The first Board revision
+incorrectly required the removed field for operator-hold and therefore omitted
+those real held tasks from display. Earlier fixture checks did not cover that
+producer shape; they were insufficient for this branch.
+
+The adapter now consumes blocked/escalated disposition for operator-hold, checks
+its resumeActor, and rejects explicit dispositions contradicting other known
+reasons. Known older reasons without disposition retain their unambiguous mapping;
+operator-hold without valid disposition is refused. No writer/native changes.
+
+Regression: exact persisted operator-hold shapes for both dispositions, wrong
+actor, unknown/missing disposition, and contradictory non-operator reason pairs.
+Before fix: 4 failed / 6 passed. After fix: all 10 adapter tests pass. Narrow ESLint,
+dashboard server typecheck and whitespace checks pass. Original 98d7409f1 remains
+an immutable review boundary; this correction is a separate local commit.

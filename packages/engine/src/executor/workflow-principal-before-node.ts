@@ -18,7 +18,7 @@ import type {
   WorkflowIrNode,
   WorkflowWorkItem,
 } from "@fusion/core";
-import { classifyWorkflowAgentNode, isWorkflowAgentRole } from "@fusion/core";
+import { classifyWorkflowAgentNode, isWorkflowAgentRole, hashWorkflowIr } from "@fusion/core";
 import {
   routeWorkflowPrincipal,
   validateFencedWorkflowPrincipal,
@@ -175,9 +175,31 @@ if (routed.status === "unclassified") return undefined;
  * error destroyed a legitimate `held` continuation. Replacing unconditionally on
  * the success path removes the need to classify errors at all.
  */
+// FNXC:WorkflowOverlayRelease 2026-09-14-04:33: Actual resumed/current continuation scopes release handoff; retained metadata alone never diverts an unrelated execution.
+const resumedId = typeof context["workflow:resumed-work-item-id"] === "string"
+  ? context["workflow:resumed-work-item-id"] as string
+  : typeof context["workflow:work-item-id"] === "string" ? context["workflow:work-item-id"] as string : undefined;
+const releaseTask = resumedId && typeof deps.store.getTask === "function" ? await deps.store.getTask(nodeTask.id) : nodeTask;
+const releaseTerminal = (releaseTask.sourceMetadata?.procedureEngineLive as { currentTerminal?: {
+  graphRunId: string; release?: { successorId: string; currentAdmittedWorkItemId?: string };
+} } | undefined)?.currentTerminal;
+const releasedScope = !!resumedId && !!releaseTerminal?.release;
 const writeContinuation = async (
   input: Parameters<NonNullable<TaskStore["upsertWorkflowWorkItem"]>>[0] & { kind: "task" },
 ): Promise<WorkflowWorkItem | undefined> => {
+  if (releasedScope) {
+    const result = await deps.store.replaceWorkflowOverlayReleasedPrincipal({ ...input,
+      stableWorkflowRunId: deps.resolvedRunId, irHash: hashWorkflowIr(deps.columnAgentIr!),
+    }, { graphRunId: deps.resolvedRunId!, workflowIrHash: hashWorkflowIr(deps.columnAgentIr!), resumedWorkItemId: resumedId!,
+      admission: { runId: nodeTask.checkoutRunId!, leaseEpoch: nodeTask.checkoutLeaseEpoch!, agentId: nodeTask.checkedOutBy!, nodeId: nodeTask.checkoutNodeId! },
+      ...(context["loop:active"] ? { loop: context["loop:active"] as { loopNodeId: string; iteration: number } } : {}),
+    });
+    if (result.applied) {
+      context["workflow:resumed-work-item-id"] = result.workItem.id;
+      return result.workItem;
+    }
+    if (result.reason !== "not-applicable") throw new Error(`workflow overlay principal ${result.reason}`);
+  }
   if (typeof deps.store.replaceActiveTaskWorkflowContinuation === "function") {
     return await deps.store.replaceActiveTaskWorkflowContinuation(input);
   }
@@ -300,7 +322,7 @@ let durableWorkItemId = typeof context["workflow:work-item-id"] === "string"
  * fence as a claimed continuation. A persistence failure releases the
  * just-acquired capacity and fails closed rather than running ambient.
  */
-if (!durableWorkItemId) {
+if (!durableWorkItemId || releasedScope) {
   /*
    * FNXC:WorkflowAgentRouting 2026-08-07-23:50:
    * The fence is written through the atomic replace primitive (see

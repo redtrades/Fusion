@@ -6,6 +6,13 @@
  * behavior-preserving refactor. Each function receives the TaskStore
  * instance as its first parameter and performs byte-identical work.
  */
+import { isDeepStrictEqual } from "node:util";
+import { and, eq } from "drizzle-orm";
+import * as schema from "../postgres/schema/index.js";
+import { taskProjectScope } from "../postgres/data-layer.js";
+import { acquireTaskAdvisoryXactLock } from "./task-advisory-lock.js";
+import { readTaskRowInTransaction } from "./async/async-persistence.js";
+import type { TaskStep } from "../types.js";
 import {TaskStore, storeLog} from "../store.js";
 import {existsSync} from "node:fs";
 import type {Task, MergeResult, MergeQueueEntry, MergeQueueAcquireOptions} from "../types.js";
@@ -69,44 +76,22 @@ async function appendProactiveStepStatus(store: TaskStore, taskId: string, messa
   await store.appendAgentLog(taskId, message, "status", undefined, "executor");
 }
 
-async function mutateStepImpl(store: TaskStore, id: string, stepIndex: number, status: import("../types.js").StepStatus, options?: { source?: "graph"; summary?: string; operatorOverride?: boolean },): Promise<{ task: Task; startResult?: Omit<StepStartResult, "task"> }> {
-    // FNXC:WorkflowStepOrdering 2026-07-20-20:05:
-    // Step-inversion projection discipline (U6/KTD-7). A `source: "graph"` write
-    // is the workflow-graph executor projecting a foreach instance's lifecycle
-    // (in-progress / done / pending) onto Task.steps[] with EXPLICIT indices. Three
-    // behaviors diverge from a legacy write with no explicit dependency metadata:
-    //   (a) the out-of-order start/completion guard uses DEPENDENCY order (an
-    //       in-progress or done write is legal when every dependsOn step —
-    //       default: the immediately-preceding step — is done/skipped, KTD-11).
-    //       Explicit dependsOn metadata is
-    //       authoritative for every writer, not only graph-tagged writes;
-    //   (b) a guard that DOES suppress a graph write logs an audit warning loudly
-    //       (legacy stays silent — a graph suppression is a projection bug);
-    //   (c) the auto-reinit-from-PROMPT.md path is bypassed (the graph pinned the
-    //       step count at foreach expansion; re-parsing here would desync, KTD-3).
-    const graphSource = options?.source === "graph";
-    return store.withTaskLock(id, async () => {
-      const dir = store.taskDir(id);
-      const task = await store.readTaskJson(dir);
+/** FNXC:DeterministicStepProjection 2026-09-14-06:14:
+ * Only the protected graph caller supplies these captured native identities and ordered plan.
+ * Legacy callers retain their existing mutation contract. Expected definitions omit status only.
+ */
+export interface StepMutationOptions {
+  source?: "graph";
+  summary?: string;
+  operatorOverride?: boolean;
+  ownership?: { runId: string; leaseEpoch: number; agentId: string; nodeId: string };
+  expectedSteps?: Omit<TaskStep, "status">[];
+  signal?: AbortSignal;
+}
+type StepMutationResult = { task: Task; startResult?: Omit<StepStartResult, "task">; chatMessage?: string | null };
 
-      // Auto-initialize steps from PROMPT.md if empty. Bypassed for graph-source
-      // writes (U6/KTD-3): the graph owns explicit indices pinned at expansion.
-      // FNXC:TaskDetailPromptResilience 2026-07-10-15:00 (merge port from main):
-      // step auto-init is best-effort — an unreadable PROMPT.md must not fail
-      // updateStep; proceed with the persisted (empty) steps.
-      let promptStepsUnavailable: string | undefined;
-      if (task.steps.length === 0 && !graphSource) {
-        try {
-          task.steps = await store.parseStepsFromPrompt(id);
-        } catch (err) {
-          // Remember WHY steps couldn't be resolved so the range check below
-          // attributes the failure to the unreadable PROMPT.md rather than a
-          // misleading "0 steps".
-          promptStepsUnavailable = err instanceof Error ? err.message : String(err);
-          storeLog.warn(`[task-detail] failed to auto-init steps from PROMPT.md for ${id}: ${promptStepsUnavailable}`);
-        }
-      }
-
+function applyStepTransition(task: Task, stepIndex: number, status: import("../types.js").StepStatus, options?: StepMutationOptions, promptStepsUnavailable?: string): StepMutationResult {
+  const graphSource = options?.source === "graph";
       // Initialize log array if missing (for legacy tasks)
       if (!task.log) {
         task.log = [];
@@ -118,7 +103,7 @@ async function mutateStepImpl(store: TaskStore, id: string, stepIndex: number, s
         // genuinely stepless task), surface the real cause.
         if (promptStepsUnavailable !== undefined && task.steps.length === 0) {
           throw new Error(
-            `Cannot update step ${stepIndex} for ${id}: its steps are defined in PROMPT.md, which could not be read (${promptStepsUnavailable}).`,
+            `Cannot update step ${stepIndex} for ${task.id}: its steps are defined in PROMPT.md, which could not be read (${promptStepsUnavailable}).`,
           );
         }
         throw new Error(
@@ -142,9 +127,6 @@ async function mutateStepImpl(store: TaskStore, id: string, stepIndex: number, s
           timestamp: ts,
           action: `Ignored ${currentStatus}→in-progress regression for step ${stepIndex} (${task.steps[stepIndex].name})`,
         });
-        await store.atomicWriteTaskJson(dir, task);
-        if (store.isWatching) store.taskCache.set(id, { ...task });
-        store.emit("task:updated", task);
         return {
           task,
           startResult: {
@@ -232,9 +214,6 @@ async function mutateStepImpl(store: TaskStore, id: string, stepIndex: number, s
                 `step ${blockingIndex} (${blockingStatus})`,
             });
           }
-          await store.atomicWriteTaskJson(dir, task);
-          if (store.isWatching) store.taskCache.set(id, { ...task });
-          store.emit("task:updated", task);
           return {
             task,
             ...(status === "in-progress"
@@ -274,9 +253,6 @@ async function mutateStepImpl(store: TaskStore, id: string, stepIndex: number, s
               `(${stepName}) → ${status} arrived after completion`,
           });
         }
-        await store.atomicWriteTaskJson(dir, task);
-        if (store.isWatching) store.taskCache.set(id, { ...task });
-        store.emit("task:updated", task);
         return {
           task,
           ...(status === "in-progress"
@@ -373,30 +349,93 @@ async function mutateStepImpl(store: TaskStore, id: string, stepIndex: number, s
         });
       }
 
-      await store.atomicWriteTaskJson(dir, task);
-      if (store.isWatching) store.taskCache.set(id, { ...task });
-
-      store.emit("task:updated", task);
-      await appendProactiveStepStatus(
-        store,
-        id,
-        proactiveStepStatusMessage(stepIndex, task.steps[stepIndex].name, currentStatus, status),
-      ).catch(() => undefined);
       return {
         task,
-        ...(status === "in-progress"
-          ? {
-              startResult: {
-                accepted: true,
-                disposition: currentStatus === "in-progress" ? "resumed" as const : "started" as const,
-              },
-            }
-          : {}),
+        chatMessage: proactiveStepStatusMessage(stepIndex, task.steps[stepIndex].name, currentStatus, status),
+        ...(status === "in-progress" ? { startResult: { accepted: true, disposition: currentStatus === "in-progress" ? "resumed" as const : "started" as const } } : {}),
       };
-    });
+
 }
 
-export async function updateStepImpl(store: TaskStore, id: string, stepIndex: number, status: import("../types.js").StepStatus, options?: { source?: "graph"; summary?: string; operatorOverride?: boolean },): Promise<Task> {
+async function mutateStepImpl(store: TaskStore, id: string, stepIndex: number, status: import("../types.js").StepStatus, options?: StepMutationOptions): Promise<StepMutationResult> {
+  const protectedWrite = options !== undefined && ["ownership", "expectedSteps", "signal"].some(key => Object.hasOwn(options, key));
+  if (protectedWrite) return mutateProtectedGraphStep(store, id, stepIndex, status, options!);
+  const graphSource = options?.source === "graph";
+  return store.withTaskLock(id, async () => {
+    const dir = store.taskDir(id);
+    const task = await store.readTaskJson(dir);
+      // Auto-initialize steps from PROMPT.md if empty. Bypassed for graph-source
+      // writes (U6/KTD-3): the graph owns explicit indices pinned at expansion.
+      // FNXC:TaskDetailPromptResilience 2026-07-10-15:00 (merge port from main):
+      // step auto-init is best-effort — an unreadable PROMPT.md must not fail
+      // updateStep; proceed with the persisted (empty) steps.
+      let promptStepsUnavailable: string | undefined;
+      if (task.steps.length === 0 && !graphSource) {
+        try {
+          task.steps = await store.parseStepsFromPrompt(id);
+        } catch (err) {
+          // Remember WHY steps couldn't be resolved so the range check below
+          // attributes the failure to the unreadable PROMPT.md rather than a
+          // misleading "0 steps".
+          promptStepsUnavailable = err instanceof Error ? err.message : String(err);
+          storeLog.warn(`[task-detail] failed to auto-init steps from PROMPT.md for ${id}: ${promptStepsUnavailable}`);
+        }
+      }
+
+
+    const result = applyStepTransition(task, stepIndex, status, options, promptStepsUnavailable);
+    await store.atomicWriteTaskJson(dir, result.task);
+    if (store.isWatching) store.taskCache.set(id, { ...result.task });
+    store.emit("task:updated", result.task);
+    await appendProactiveStepStatus(store, id, result.chatMessage ?? null).catch(() => undefined);
+    return result;
+  });
+}
+
+async function mutateProtectedGraphStep(store: TaskStore, id: string, stepIndex: number, status: import("../types.js").StepStatus, options: StepMutationOptions): Promise<StepMutationResult> {
+  const signal = options.signal;
+  const ownership = options.ownership && structuredClone(options.ownership);
+  const expectedSteps = options.expectedSteps && structuredClone(options.expectedSteps);
+  if (options.source !== "graph" || options.operatorOverride || !signal || !ownership?.runId || !ownership.agentId || !ownership.nodeId
+    || !Number.isSafeInteger(ownership.leaseEpoch) || ownership.leaseEpoch < 1 || !Array.isArray(expectedSteps)
+    || !Number.isSafeInteger(stepIndex) || stepIndex < 0 || !["in-progress", "done"].includes(status)) throw new Error("Protected graph step admission invalid");
+  const policyOptions = { ...options, ownership, expectedSteps };
+  const layer = store.asyncLayer;
+  if (!layer?.projectId) throw new Error("Protected graph step persistence unavailable");
+  const assertActive = () => { if (signal.aborted) throw new Error("Protected graph step aborted"); };
+  assertActive();
+  return store.withTaskLock(id, async () => {
+    const result = await layer.transactionImmediate(async tx => {
+      await acquireTaskAdvisoryXactLock(tx, layer.projectId, id);
+      await tx.select({ id: schema.project.tasks.id }).from(schema.project.tasks).where(and(eq(schema.project.tasks.id, id), taskProjectScope(layer))).for("update");
+      const row = await readTaskRowInTransaction(tx, id, { includeDeleted: true }, layer.projectId);
+      if (!row || row.deletedAt) throw new Error("Protected graph step task unavailable");
+      const task = store.rowToTask(store.pgRowToTaskRow(row));
+      assertActive();
+      if (task.checkedOutBy !== ownership.agentId || task.checkoutNodeId !== ownership.nodeId || task.checkoutRunId !== ownership.runId || task.checkoutLeaseEpoch !== ownership.leaseEpoch) throw new Error("Protected graph step ownership changed");
+      if (task.paused || task.userPaused || task.status === "paused") throw new Error("Protected graph step paused");
+      const definitions = task.steps.map(({ status: _status, ...definition }) => definition);
+      if (!isDeepStrictEqual(definitions, expectedSteps)) throw new Error("Protected graph step plan changed");
+      if (status === "done" && task.steps[stepIndex]?.status !== "in-progress") throw new Error("Protected graph step completion requires in-progress");
+      const transition = applyStepTransition(task, stepIndex, status, policyOptions);
+      const [updated] = await tx.update(schema.project.tasks).set({
+        steps: task.steps, stepReports: task.stepReports ?? [], log: task.log,
+        currentStep: task.currentStep, stuckKillCount: task.stuckKillCount ?? 0, updatedAt: task.updatedAt,
+      }).where(and(eq(schema.project.tasks.id, id), taskProjectScope(layer))).returning();
+      if (!updated) throw new Error("Protected graph step task missing");
+      assertActive();
+      return { ...transition, task: store.rowToTask(store.pgRowToTaskRow(updated)) };
+    });
+    // FNXC:DeterministicStepProjection 2026-09-14-06:14: Publish mirrors/events only after commit, never by nesting a public mutation in the transaction.
+    await store.writeTaskJsonFile(store.taskDir(id), result.task);
+    if (store.isWatching) store.taskCache.set(id, { ...result.task });
+    store.emitTaskLifecycleEventSafely("task:updated", [result.task]);
+    await appendProactiveStepStatus(store, id, result.chatMessage ?? null).catch(() => undefined);
+    return result;
+  });
+}
+
+export async function updateStepImpl(store: TaskStore, id: string, stepIndex: number, status: import("../types.js").StepStatus, options?: StepMutationOptions,): Promise<Task> {
   return (await mutateStepImpl(store, id, stepIndex, status, options)).task;
 }
 
@@ -404,7 +443,7 @@ export async function updateStepImpl(store: TaskStore, id: string, stepIndex: nu
 FNXC:StepLifecycle 2026-07-22-10:30:
 Execution must distinguish a dependency-blocked projection from a valid restart resume even when both return a task whose target step is already in-progress. Keep that verdict inside the same task lock as the dependency check; a caller-side pre-read would race and duplicate ordering policy.
 */
-export async function startStepImpl(store: TaskStore, id: string, stepIndex: number, options?: { source?: "graph" },): Promise<StepStartResult> {
+export async function startStepImpl(store: TaskStore, id: string, stepIndex: number, options?: StepMutationOptions,): Promise<StepStartResult> {
   const result = await mutateStepImpl(store, id, stepIndex, "in-progress", options);
   return {
     task: result.task,

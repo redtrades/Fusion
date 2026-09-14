@@ -1,0 +1,10 @@
+
+> @fusion/engine@0.77.0-beta.11 build /Users/man/worktrees/Fusion/268-protected-step-projection/packages/engine
+> tsc
+
+src/executor/execute-workflow-graph.ts(953,45): error TS7006: Parameter 'nodeTask' implicitly has an 'any' type.
+src/executor/execute-workflow-graph.ts(953,55): error TS7006: Parameter 'steps' implicitly has an 'any' type.
+src/executor/execute-workflow-graph.ts(953,62): error TS7006: Parameter 'signal' implicitly has an 'any' type.
+/Users/man/worktrees/Fusion/268-protected-step-projection/packages/engine:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @fusion/engine@0.77.0-beta.11 build: `tsc`
+Exit status 2

@@ -1,0 +1,47 @@
+Isolated test database ready on ephemeral port 59212
+
+ RUN  v4.1.10 /Users/man/worktrees/Fusion/268-protected-step-projection/packages/core
+
+stderr | src/__tests__/postgres/proactive-step-status.pg.test.ts > proactive step-status chat entries (PostgreSQL) > defaults off and narrates every accepted lifecycle transition once when enabled
+<NUL>fnlvl=info<NUL>[postgres-connection] external backend resolved (DATABASE_URL set): postgresql://postgres:********@127.0.0.1:59212/fusion_schema_template_97193_goldenestworkers4jkksl | planning lifecycle direct session: none (pooled endpoint — set DATABASE_MIGRATION_URL to a direct connection)
+
+stderr | src/__tests__/postgres/hybrid-step-storage-contract.pg.test.ts > hybrid step storage contract (PostgreSQL)
+<NUL>fnlvl=info<NUL>[postgres-connection] external backend resolved (DATABASE_URL set): postgresql://postgres:********@127.0.0.1:59212/fusion_hybrid_steps_97205_1_hf32im | planning lifecycle direct session: migration URL
+
+stderr | src/__tests__/postgres/store-update-step-order.pg.test.ts > TaskStore.updateStep step-order guard (PostgreSQL)
+<NUL>fnlvl=info<NUL>[postgres-connection] external backend resolved (DATABASE_URL set): postgresql://postgres:********@127.0.0.1:59212/fusion_step_order_97203_1_4jakpu | planning lifecycle direct session: migration URL
+
+stderr | src/__tests__/postgres/store-update-step-order.pg.test.ts > TaskStore.updateStep step-order guard (PostgreSQL)
+<NUL>fnlvl=warn<NUL>[task-store] Patchnode reconciliation failed during backend init {
+  phase: 'init:patchnode-reconcile',
+  error: 'Patchnode requires AsyncDataLayer.projectId'
+}
+
+stderr | src/__tests__/postgres/hybrid-step-storage-contract.pg.test.ts > hybrid step storage contract (PostgreSQL)
+<NUL>fnlvl=warn<NUL>[task-store] Patchnode reconciliation failed during backend init {
+  phase: 'init:patchnode-reconcile',
+  error: 'Patchnode requires AsyncDataLayer.projectId'
+}
+
+stderr | src/__tests__/postgres/proactive-step-status.pg.test.ts > proactive step-status chat entries (PostgreSQL) > defaults off and narrates every accepted lifecycle transition once when enabled
+<NUL>fnlvl=info<NUL>[postgres-connection] external backend resolved (DATABASE_URL set): postgresql://postgres:********@127.0.0.1:59212/fusion_proactive_step_status_97204_1_tfzo0u | planning lifecycle direct session: migration URL
+
+··stderr | src/__tests__/postgres/proactive-step-status.pg.test.ts > proactive step-status chat entries (PostgreSQL) > defaults off and narrates every accepted lifecycle transition once when enabled
+<NUL>fnlvl=warn<NUL>[task-store] Patchnode reconciliation failed during backend init {
+  phase: 'init:patchnode-reconcile',
+  error: 'Patchnode requires AsyncDataLayer.projectId'
+}
+
+··················stderr | src/__tests__/postgres/deterministic-step-projection.pg.test.ts > deterministic script task projection candidate
+<NUL>fnlvl=info<NUL>[postgres-connection] external backend resolved (DATABASE_URL set): postgresql://postgres:********@127.0.0.1:59212/fusion_a2_red_97202_1_v5h65r | planning lifecycle direct session: migration URL
+
+··················
+
+ Test Files  4 passed (4)
+      Tests  38 passed (38)
+   Start at  02:21:15
+   Duration  7.13s (transform 8.46s, setup 574ms, import 12.70s, tests 8.67s, environment 0ms)
+
+TEST_CHILD_EXIT 0 null
+BEFORE_PG_STOP_TEST_EXIT 0
+CHILD_VERDICT_EXIT 0 OUTER_NODE_EXIT 0

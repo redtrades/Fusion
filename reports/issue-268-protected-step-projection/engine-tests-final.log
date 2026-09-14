@@ -1,0 +1,27 @@
+
+ RUN  v4.1.10 /Users/man/worktrees/Fusion/268-protected-step-projection/packages/engine
+
+stderr | src/__tests__/workflow-graph-foreach.test.ts > WorkflowGraphExecutor foreach (U3) > explicit worktree isolation fails fast for workspace isolation before any allocation
+<NUL>fnlvl=warn<NUL>[scheduler] foreach fe for task FN-FOREACH: per-instance worktree isolation is not supported for workspace projects (task FN-FOREACH)
+
+stderr | src/__tests__/workflow-graph-foreach.test.ts > WorkflowGraphExecutor foreach (U3) > parallel's implicit worktree isolation fails fast for workspace isolation before any allocation
+<NUL>fnlvl=warn<NUL>[scheduler] foreach fe for task FN-FOREACH: per-instance worktree isolation is not supported for workspace projects (task FN-FOREACH)
+
+········································································stderr | src/__tests__/workflow-script-evidence.test.ts > named script evidence > retains actual harmless command stdout and stderr with exit evidence
+<NUL>fnlvl=info<NUL>[executor] FN-script-evidence: workflow step 'Assertions' executing script 'assertions': printf 'ASSERTIONS_PASS\n'; printf 'diagnostic\n' >&2
+
+stderr | src/__tests__/workflow-script-evidence.test.ts > named script evidence > bounds each successful output stream
+<NUL>fnlvl=info<NUL>[executor] FN-script-evidence: workflow step 'Assertions' executing script 'assertions': unused
+
+stderr | src/__tests__/workflow-script-evidence.test.ts > script evidence failure and ownership boundaries > projects actual failing command diagnostics through the native custom-node adapter
+<NUL>fnlvl=info<NUL>[executor] FN-script-evidence: workflow step 'assertions' executing script 'assertions': printf 'ASSERTION_FAILED\n' >&2; exit 7
+
+stderr | src/__tests__/workflow-script-evidence.test.ts > script evidence failure and ownership boundaries > native script cancellation cannot become a successful receipt
+<NUL>fnlvl=info<NUL>[executor] FN-script-evidence: workflow step 'Assertions' executing script 'assertions': unused
+
+··············
+
+ Test Files  4 passed (4)
+      Tests  86 passed (86)
+   Start at  02:23:40
+   Duration  5.04s (transform 10.49s, setup 369ms, import 18.35s, tests 82ms, environment 0ms)

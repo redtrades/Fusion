@@ -1,3 +1,4 @@
+import type { DeterministicStepProjection } from "../executor/deterministic-step-projection.js";
 import type { TaskDetail, TaskStep, WorkflowIrEdge, WorkflowIrNode } from "@fusion/core";
 import { FAST_LANE_STEP_REVIEW_ROUTE_VALUE, WorkflowIrError, instanceNodeId, isFastExecutionMode, isFastLaneBypassedTemplateNode, resolveMaxReworkCycles } from "@fusion/core";
 
@@ -127,6 +128,7 @@ async function persistInstanceState(
 }
 
 export interface ForeachEnvironment {
+  createDeterministicStepProjection?: (task: TaskDetail, steps: TaskStep[], signal: AbortSignal) => DeterministicStepProjection;
   task: TaskDetail;
   runId: string;
   /** Fresh step list (KTD-3: read at expansion, count pinned). */
@@ -433,6 +435,23 @@ export async function runForeach(
   Compile and walk the template with both halves of the no-review contract together.
   */
   const plan = compileTemplate(foreachNode, config.template, fastLane);
+  /* FNXC:DeterministicStepProjection 2026-09-14-06:19:
+   * Only a shared sequential template of blocking named scripts acquires this completion authority.
+   * Script kind also supports prompt-like seams and CLI-agent overrides, so exclude those alternate
+   * handlers explicitly. Review/step-execute and worktree-integration retain their existing paths.
+   */
+  const ownsDeterministicSteps = config.mode === "sequential" && config.isolation === "shared"
+    && config.template.nodes.length > 0 && config.template.nodes.every(node => node.kind === "script"
+      && node.config?.gateMode === "gate" && typeof node.config.scriptName === "string" && node.config.scriptName.trim().length > 0
+      && node.config.seam === undefined && node.config.reviewKind === undefined && node.config.workflowAction === undefined
+      && node.config.awaitInput !== true && node.config.cliCommand === undefined
+      && (node.config.executor === undefined || node.config.executor === "model" || node.config.executor === "cli"));
+  if (ownsDeterministicSteps && env.createDeterministicStepProjection && !env.signal) {
+    return { outcome: "failure", value: "step-projection-signal-required", visitedNodeIds };
+  }
+  const projection = ownsDeterministicSteps && env.createDeterministicStepProjection
+    ? env.createDeterministicStepProjection(env.task, env.steps, env.signal!) : undefined;
+
 
   if (config.isolation === "worktree") {
     return runForeachWorktree(foreachNode, env, config, plan, pinnedStepCount, visitedNodeIds);
@@ -484,6 +503,7 @@ export async function runForeach(
       visitedNodeIds,
       plan.templateHasStepReview,
       plan.fastLane,
+      projection,
     );
 
     if (instanceResult.outcome === "failure") {
@@ -951,6 +971,7 @@ async function runInstance(
   visitedNodeIds: string[],
   templateHasStepReview: boolean,
   fastLane: boolean,
+  projection?: DeterministicStepProjection,
 ): Promise<InstanceResult> {
   // Per-instance rework budget (KTD-5) — NOT shared across instances.
   let reworkBudget = maxReworkCycles;
@@ -984,6 +1005,11 @@ async function runInstance(
   });
 
   try {
+    if (projection && !await projection.start(stepIndex).catch(() => false)) {
+      await persistInstanceState(env.persistence, { taskId: env.task.id, runId: env.runId, foreachNodeId: foreachNode.id, stepIndex, pinnedStepCount, currentNodeId: entry.id, status: "failed", reworkCount });
+      return { outcome: "failure", value: "step-projection-start-refused" };
+    }
+    const successfulScripts = new Set<string>();
     let currentId = entry.id;
     let lastResult: WorkflowNodeResult = { outcome: "success" };
 
@@ -1023,6 +1049,11 @@ async function runInstance(
       // active context via their contextPatch; mirror them onto `active` so the
       // reserved key stays the single source of truth for later nodes.
       syncActiveFromContext(env.context, active);
+      if (projection) {
+        if (env.signal?.aborted || lastResult.outcome !== "success" || lastResult.contextPatch?.scriptSucceeded !== true || lastResult.contextPatch?.notRunReason !== undefined) {
+          lastResult = { ...lastResult, outcome: "failure", value: "step-script-not-verified" };
+        } else successfulScripts.add(currentId);
+      }
 
       if (lastResult.outcome === "failure") {
         await persistInstanceState(env.persistence, {
@@ -1045,6 +1076,10 @@ async function runInstance(
       const next = chooseNextEdge(currentId, templateOutgoing, lastResult, env.shouldTraverseEdge);
       if (!next) {
         // No outgoing edge matched → template exit reached. Instance complete.
+        if (projection && (successfulScripts.size !== templateById.size || !await projection.complete(stepIndex).catch(() => false))) {
+          await persistInstanceState(env.persistence, { taskId: env.task.id, runId: env.runId, foreachNodeId: foreachNode.id, stepIndex, pinnedStepCount, currentNodeId: currentId, status: "failed", reworkCount });
+          return { outcome: "failure", value: "step-projection-completion-refused" };
+        }
         await persistInstanceState(env.persistence, {
           taskId: env.task.id,
           runId: env.runId,

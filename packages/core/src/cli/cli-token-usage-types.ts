@@ -1,9 +1,26 @@
 /** Native-issued future paths carry no invented inode. Binding is one-way. */
 export interface CliTokenCursor {
+  kind?: never;
   bytes: number;
   fileIdentity?: string;
   transcriptPath?: string;
   phase: "awaiting-file" | "baseline" | "observing" | "drained" | "failed";
+}
+/** Native Hermes row totals have no transcript inode or byte offset. */
+export interface HermesTokenCursor {
+  kind: "hermes-session-cumulative";
+  nativeSessionId: string;
+  phase: "baseline" | "observing" | "drained" | "failed";
+  bytes?: never;
+  fileIdentity?: never;
+  transcriptPath?: never;
+}
+export type NativeTokenCursor = CliTokenCursor | HermesTokenCursor;
+export function validateHermesTokenCursor(cursor: HermesTokenCursor): void {
+  if (!cursor || cursor.kind !== "hermes-session-cumulative" || typeof cursor.nativeSessionId !== "string"
+    || !cursor.nativeSessionId.trim() || cursor.nativeSessionId.length > 249
+    || !["baseline", "observing", "drained", "failed"].includes(cursor.phase)
+    || Object.keys(cursor).some(key => !["kind", "nativeSessionId", "phase"].includes(key))) throw new Error("Invalid Hermes cumulative cursor");
 }
 export function validateCliTokenCursor(cursor: CliTokenCursor): void {
   if (!cursor || !Number.isSafeInteger(cursor.bytes) || cursor.bytes < 0 || !["awaiting-file", "baseline", "observing", "drained", "failed"].includes(cursor.phase)) throw new Error("Invalid CLI token cursor");
@@ -38,7 +55,7 @@ export interface CliTokenLedger {
   identities?: Record<string, CliObservedIdentity>;
   credits?: Record<string, CliTokenCounters>;
   owners?: Record<string, { sessionId: string; runId: string; leaseEpoch: number; agentId: string; nodeId: string }>;
-  cursors?: Record<string, CliTokenCursor>;
+  cursors?: Record<string, NativeTokenCursor>;
   sessions: Record<string, Record<string, CliTokenCounters>>;
 }
 export const CLI_TOKEN_FIELDS = ["inputTokens", "outputTokens", "cachedTokens", "cacheWriteTokens"] as const;
@@ -57,7 +74,8 @@ export function validateCliTokenLedger(value: unknown): asserts value is CliToke
   }
   for (const usage of Object.values(ledger.credits ?? {})) validateCliTokenCounters(usage);
   for (const cursor of Object.values(ledger.cursors ?? {})) {
-    validateCliTokenCursor(cursor);
+    if (cursor.kind === "hermes-session-cumulative") validateHermesTokenCursor(cursor);
+    else validateCliTokenCursor(cursor);
   }
   if (count > 4096 || Buffer.byteLength(JSON.stringify(ledger)) > 1024 * 1024) throw new Error("CLI token ledger capacity reached");
 }

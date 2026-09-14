@@ -1,5 +1,5 @@
 import { releaseWorkflowOverlayTerminalFencedImpl, readWorkflowOverlayCurrentTerminalImpl, replaceWorkflowOverlayReleasedPrincipalImpl, readWorkflowOverlayReleasedAdmissionImpl } from "./task-store/workflow-overlay-release.js";
-import { recordCliTokenUsageFencedImpl, type CliTokenUsageWrite, type CliTokenUsageAck } from "./task-store/cli-token-usage-ops.js";
+import { recordCliTokenUsageFencedImpl, type NativeTokenUsageWrite, type CliTokenUsageAck } from "./task-store/cli-token-usage-ops.js";
 import { applyWorkflowOverlayTerminalFencedImpl } from "./task-store/moves.js";
 import { EventEmitter } from "node:events";
 import type { TaskMoveLanes } from "./workflows/workflow-lifecycle-traits.js";
@@ -2234,7 +2234,7 @@ export class TaskStore extends EventEmitter<TaskStoreEvents> {
   async markToolFailureRetryExhaustedAudit(taskId: string): Promise<boolean> {
     return markToolFailureRetryExhaustedAuditImpl(this, taskId);
   }
-  async recordCliTokenUsageFenced(id: string, input: CliTokenUsageWrite): Promise<CliTokenUsageAck> {
+  async recordCliTokenUsageFenced(id: string, input: NativeTokenUsageWrite): Promise<CliTokenUsageAck> {
     return recordCliTokenUsageFencedImpl(this, id, input);
   }
 

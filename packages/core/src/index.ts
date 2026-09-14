@@ -3154,5 +3154,5 @@ export type { JiraConfigSettingsSource, ResolvedJiraConfig, ResolveJiraConfigInp
 export { advanceCliTokenLedger, validateCliTokenLedger, emptyCliTokenCounters, validateCliTokenCounters, CLI_TOKEN_FIELDS } from "./cli/cli-token-usage-types.js";
 export type { CliTokenCounters, CliTokenLedger } from "./cli/cli-token-usage-types.js";
 
-export type { CliTokenUsageWrite, CliTokenUsageAck } from "./task-store/cli-token-usage-ops.js";
+export type { CliTokenUsageWrite, NativeTokenUsageWrite, HermesTokenUsageWrite, CliTokenUsageAck } from "./task-store/cli-token-usage-ops.js";
 export type { CliTokenBudgetQuery, CliTokenBudgetInspection, CliObservedIdentity } from "./cli/cli-token-usage-types.js";

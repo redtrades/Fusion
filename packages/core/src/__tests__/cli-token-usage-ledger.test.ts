@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advanceCliTokenLedger } from "../cli/cli-token-usage-types.js";
+import { advanceCliTokenLedger, validateCliTokenLedger } from "../cli/cli-token-usage-types.js";
 const usage = (inputTokens: number) => ({ inputTokens, outputTokens: 0, cachedTokens: 1000, cacheWriteTokens: 0 });
 describe("durable CLI usage ledger", () => {
   it("replays cumulative snapshots and combines different native sessions", () => {
@@ -23,4 +23,18 @@ describe("durable CLI usage ledger", () => {
     expect(() => advanceCliTokenLedger({ version: 99 }, "codex:a", "cumulative", usage(1), false)).toThrow();
     expect(() => advanceCliTokenLedger(undefined, "codex:a", "cumulative", usage(Infinity), false)).toThrow();
   });
+  it("validates durable Hermes cursors without accepting fabricated transcript fields", () => {
+    const cursor = { kind: "hermes-session-cumulative", nativeSessionId: "native", phase: "observing" };
+    const ledger = { version: 1, sessions: {}, cursors: { "hermes:native": cursor } };
+    expect(() => validateCliTokenLedger(ledger)).not.toThrow();
+    for (const patch of [{ bytes: 0 }, { fileIdentity: "invented" }, { transcriptPath: "/fake" }, { phase: "awaiting-file" }, { nativeSessionId: "" }]) {
+      expect(() => validateCliTokenLedger({ ...ledger, cursors: { "hermes:native": { ...cursor, ...patch } } })).toThrow();
+    }
+  });
+
+  it("keeps the shared durable entry bound for Hermes streams", () => {
+    const sessions = Object.fromEntries(Array.from({ length: 4096 }, (_, i) => [`hermes:n${i}`, { "session-cumulative": usage(0) }]));
+    expect(() => advanceCliTokenLedger({ version: 1, sessions }, "hermes:overflow", "session-cumulative", usage(1), false)).toThrow(/capacity/);
+  });
+
 });

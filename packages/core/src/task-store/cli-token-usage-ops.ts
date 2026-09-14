@@ -6,9 +6,10 @@ import * as schema from "../postgres/schema/index.js";
 import { taskProjectScope } from "../postgres/data-layer.js";
 import { readTaskRowInTransaction } from "./async/async-persistence.js";
 import { acquireTaskAdvisoryXactLock } from "./task-advisory-lock.js";
-import { advanceCliTokenLedger, validateCliTokenLedger, CLI_TOKEN_FIELDS, emptyCliTokenCounters, validateCliTokenCursor, validateCliObservedIdentity, type CliObservedIdentity, type CliTokenCursor, type CliTokenCounters, type CliTokenLedger } from "../cli/cli-token-usage-types.js";
+import { advanceCliTokenLedger, validateCliTokenLedger, CLI_TOKEN_FIELDS, emptyCliTokenCounters, validateCliTokenCursor, validateCliObservedIdentity, validateHermesTokenCursor, validateCliTokenCounters, type HermesTokenCursor, type CliObservedIdentity, type CliTokenCursor, type CliTokenCounters, type CliTokenLedger } from "../cli/cli-token-usage-types.js";
 
 export interface CliTokenUsageWrite {
+  kind?: never;
   identity?: CliObservedIdentity;
   sessionId: string;
   nativeSessionId: string;
@@ -23,6 +24,23 @@ export interface CliTokenUsageWrite {
   reaffirm?: true;
   limits: { soft?: number; hard?: number };
 }
+/** Supplied actual durable native totals only; does not attest persistence completeness. */
+export interface HermesTokenUsageWrite {
+  kind: "hermes-session-cumulative";
+  sessionId: string;
+  nativeSessionId: string;
+  projectId: string;
+  admission: { runId: string; leaseEpoch: number; agentId: string; nodeId: string };
+  usage: CliTokenCounters;
+  baseline: boolean;
+  cursor: HermesTokenCursor;
+  limits: { soft?: number; hard: number };
+  observations?: never;
+  identity?: never;
+  fresh?: never;
+  reaffirm?: never;
+}
+export type NativeTokenUsageWrite = CliTokenUsageWrite | HermesTokenUsageWrite;
 export interface CliTokenUsageAck { task: Task; hardExceeded: boolean; observedWorkTokens: number }
 
 /**
@@ -30,16 +48,27 @@ export interface CliTokenUsageAck { task: Task; hardExceeded: boolean; observedW
  * one task transaction, fenced against Reset/lease changes. Never use the
  * process-only updateTaskAtomic path for durable replay checkpoints.
  */
-export async function recordCliTokenUsageFencedImpl(store: TaskStore, id: string, input: CliTokenUsageWrite): Promise<CliTokenUsageAck> {
+export async function recordCliTokenUsageFencedImpl(store: TaskStore, id: string, input: NativeTokenUsageWrite): Promise<CliTokenUsageAck> {
   const request = structuredClone(input);
   const layer = store.asyncLayer;
   if (!layer?.projectId) throw new Error("CLI token persistence unavailable");
   if (request.projectId !== layer.projectId) throw new Error("CLI token project mismatch");
-  if (!request.sessionId || !request.nativeSessionId || !request.projectId || !request.admission?.runId || !request.admission.agentId || !request.admission.nodeId || !Number.isSafeInteger(request.admission.leaseEpoch) || request.admission.leaseEpoch < 1 || !Array.isArray(request.observations) || request.observations.length > 4096 || !Number.isSafeInteger(request.cursor?.bytes) || request.cursor.bytes < 0 || typeof request.baseline !== "boolean" || Object.values(request.limits).some(value => value !== undefined && (!Number.isSafeInteger(value) || value < 0))) throw new Error("Invalid CLI token request");
-  validateCliTokenCursor(request.cursor);
-  if (request.identity) validateCliObservedIdentity(request.identity);
-  if (request.reaffirm !== undefined && request.reaffirm !== true) throw new Error("Invalid CLI pending reaffirmation");
-  if (request.fresh !== undefined && request.fresh !== true) throw new Error("Invalid CLI fresh admission");
+  const hermes = request.kind === "hermes-session-cumulative";
+  if (!request.sessionId || !request.nativeSessionId || !request.projectId || !request.admission?.runId || !request.admission.agentId || !request.admission.nodeId || !Number.isSafeInteger(request.admission.leaseEpoch) || request.admission.leaseEpoch < 1 || typeof request.baseline !== "boolean" || !request.limits || Object.values(request.limits).some(value => value !== undefined && (!Number.isSafeInteger(value) || value < 0))) throw new Error("Invalid CLI token request");
+  if (hermes) {
+    validateHermesTokenCursor(request.cursor);
+    validateCliTokenCounters(request.usage);
+    if (request.baseline && request.cursor.phase !== "baseline") throw new Error("Hermes historical baseline requires baseline phase");
+    if (request.cursor.nativeSessionId !== request.nativeSessionId || !Number.isSafeInteger(request.limits.hard) || request.limits.hard <= 0
+      || Object.keys(request).some(key => !["kind", "sessionId", "nativeSessionId", "projectId", "admission", "usage", "baseline", "cursor", "limits"].includes(key))) throw new Error("Invalid Hermes cumulative request");
+  } else {
+    if (request.kind !== undefined || !Array.isArray(request.observations) || request.observations.length > 4096) throw new Error("Invalid CLI token request");
+    validateCliTokenCursor(request.cursor);
+    if (request.identity) validateCliObservedIdentity(request.identity);
+    if (request.reaffirm !== undefined && request.reaffirm !== true) throw new Error("Invalid CLI pending reaffirmation");
+    if (request.fresh !== undefined && request.fresh !== true) throw new Error("Invalid CLI fresh admission");
+  }
+  const observations = hermes ? [{ key: "session-cumulative", usage: request.usage }] : request.observations;
   return store.withTaskLock(id, async () => {
     const ack = await layer.transactionImmediate(async tx => {
       await acquireTaskAdvisoryXactLock(tx, layer.projectId, id);
@@ -50,26 +79,32 @@ export async function recordCliTokenUsageFencedImpl(store: TaskStore, id: string
       const a = request.admission;
       if (task.checkoutRunId !== a.runId || task.checkoutLeaseEpoch !== a.leaseEpoch || task.checkedOutBy !== a.agentId || task.checkoutNodeId !== a.nodeId) throw new Error("CLI token ownership mismatch");
       const [session] = await tx.select().from(schema.project.cliSessions).where(and(eq(schema.project.cliSessions.id, request.sessionId), eq(schema.project.cliSessions.ownerProjectId, request.projectId))).for("share");
-      if (!session || session.taskId !== id || session.nativeSessionId !== request.nativeSessionId || !["codex", "claude-code"].includes(session.adapterId)) throw new Error("CLI token native session identity mismatch");
+      if (!session || session.taskId !== id || session.nativeSessionId !== request.nativeSessionId || (hermes ? session.adapterId !== "hermes" : !["codex", "claude-code"].includes(session.adapterId))) throw new Error("CLI token native session identity mismatch");
       const key = `${session.adapterId}:${request.nativeSessionId}`;
       let ledger = task.sourceMetadata?.cliTokenUsage as CliTokenLedger | undefined;
       if (ledger !== undefined) validateCliTokenLedger(ledger);
       const previousCursor = ledger?.cursors?.[key];
       const previousOwner = ledger?.owners?.[key];
       if (previousOwner && (previousOwner.sessionId !== request.sessionId || previousOwner.runId !== a.runId || previousOwner.leaseEpoch !== a.leaseEpoch || previousOwner.agentId !== a.agentId || previousOwner.nodeId !== a.nodeId)) throw new Error("CLI token stream owner changed");
-      if (request.reaffirm) {
+      if (hermes) {
+        if (previousCursor && previousCursor.kind !== "hermes-session-cumulative") throw new Error("Hermes cursor kind changed");
+        const previous = ledger?.sessions?.[key]?.["session-cumulative"];
+        if (previous && CLI_TOKEN_FIELDS.some(field => request.usage[field] < previous[field])) throw new Error("Hermes cumulative counters regressed");
+      }
+      if (!hermes && request.reaffirm) {
         if (request.fresh || session.adapterId !== "codex" || !previousOwner || previousCursor?.phase !== "awaiting-file" || request.baseline || request.observations.length || request.cursor.phase !== "awaiting-file" || request.cursor.bytes !== 0 || request.cursor.fileIdentity !== undefined || request.cursor.transcriptPath !== previousCursor.transcriptPath) throw new Error("Invalid CLI pending reaffirmation");
-      } else if (request.fresh) {
+      } else if (!hermes && request.fresh) {
         if (session.adapterId !== "codex" || Object.hasOwn(ledger?.sessions ?? {}, key) || request.baseline || request.observations.length || request.cursor.phase !== "awaiting-file" || request.cursor.fileIdentity !== undefined) throw new Error("CLI fresh admission already used or invalid");
-      } else if (request.cursor.transcriptPath && !previousCursor) throw new Error("CLI native future stream lacks admission");
-      else if (request.cursor.phase === "awaiting-file") throw new Error("CLI pending cursor requires fresh admission");
+      } else if (!hermes && request.cursor.transcriptPath && !previousCursor) throw new Error("CLI native future stream lacks admission");
+      else if (!hermes && request.cursor.phase === "awaiting-file") throw new Error("CLI pending cursor requires fresh admission");
       if (previousCursor?.phase === "failed" && request.cursor.phase !== "failed") throw new Error("Failed CLI token cursor cannot resume");
-      if (previousCursor) {
+      if (!hermes && previousCursor) {
+        if (previousCursor.kind === "hermes-session-cumulative") throw new Error("CLI cursor kind changed");
         if (previousCursor.transcriptPath !== request.cursor.transcriptPath || (previousCursor.fileIdentity && previousCursor.fileIdentity !== request.cursor.fileIdentity) || request.cursor.bytes < previousCursor.bytes || (previousCursor.phase === "awaiting-file" && !request.reaffirm && (request.baseline || !request.cursor.fileIdentity))) throw new Error("CLI token stream identity changed");
       }
 
       const oldIdentity = ledger?.identities?.[key];
-      const nextIdentity = request.identity ?? (oldIdentity && (request.baseline || request.observations.length) ? { ...oldIdentity, coverage: "incomplete" as const } : oldIdentity);
+      const nextIdentity = request.identity ?? (oldIdentity && (request.baseline || observations.length) ? { ...oldIdentity, coverage: "incomplete" as const } : oldIdentity);
       if (request.identity && ((oldIdentity?.selected && !isDeepStrictEqual(oldIdentity.selected, request.identity.selected))
         || (oldIdentity?.observed && !isDeepStrictEqual(oldIdentity.observed, request.identity.observed))
         || (oldIdentity?.coverage === "incomplete" && request.identity.coverage !== "incomplete"))) throw new Error("CLI observed identity changed");
@@ -77,7 +112,7 @@ export async function recordCliTokenUsageFencedImpl(store: TaskStore, id: string
       if (nextIdentity?.observed && nextIdentity.observed.source !== (session.adapterId === "codex" ? "codex-turn-context" : "claude-assistant-message")) throw new Error("CLI observed identity adapter mismatch");
       const baseline = request.baseline && !Object.hasOwn(ledger?.sessions ?? {}, key);
       const delta = emptyCliTokenCounters();
-      for (const observation of request.observations) {
+      for (const observation of observations) {
         const next = advanceCliTokenLedger(ledger, key, observation.key, observation.usage, baseline);
         ledger = next.ledger;
         for (const field of CLI_TOKEN_FIELDS) delta[field] += next.delta[field];

@@ -1,0 +1,15 @@
+{
+  "reports/issue-303-native-author-sandbox/final-tests.log.gz": "a3e496c77c39587bf90259ee9ecb7138cd0539ad20a21f2fa2b14733b60d0a11",
+  "reports/issue-303-native-author-sandbox/typecheck.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+  "reports/issue-303-native-author-sandbox/static.log.gz": "3eadeb26e1f27eb8375f1d027eb41e49a503507bcc362a7b76485621c6120be7",
+  "reports/issue-303-native-author-sandbox/build.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+  "reports/issue-303-native-author-sandbox/green.log.gz": "36c34804ea11e44b3c848dea9330b635e2178f203b88c4c31e2330adfc654eba",
+  "reports/issue-303-native-author-sandbox/changeset-check.log.gz": "fd5b0fe8067e0ce1b51e70f161a756a96837d716a2641414aa2c68826ddbc6f9",
+  "reports/issue-303-native-author-sandbox/changeset-check-final.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+  "reports/issue-303-native-author-sandbox/PLAN.md": "b7689d047030972f76e1a80457d955046b8b71421cc46704714ce13ae8d528c5",
+  "reports/issue-303-native-author-sandbox/routing-red.log.gz": "ceb6d08ce10ac1dea1e6831a70058ba8fb5bcaf7a4715196b1bb0e59aa8134e4",
+  "reports/issue-303-native-author-sandbox/accounting-regression.log.gz": "6c888b8d581ca8593520887fb7efe69c36351fc977ba1fb86f465bf2393458e7",
+  "reports/issue-303-native-author-sandbox/red.log.gz": "a00b9a12f27ddbc7355ba5ca60f82230271343442e9f5a5608c329b890cc6153",
+  "reports/issue-303-native-author-sandbox/HANDOFF.md": "67993b310bcc31ad180bb94ca8cdcd86a264ff36b66fbfc37c9d5ba543665ef9",
+  "reports/issue-303-native-author-sandbox/lint.log.gz": "5cf3c8d2ef96bb8beca82ee293f25e5b6939535b5ffca4383cfc61b5a9cebcbd"
+}

@@ -435,6 +435,10 @@ export class CliSessionManager {
    * waitForReady).
    */
   async spawn(options: SpawnCliSessionOptions): Promise<CliSession> {
+    if (options.settings?.codexSandbox !== undefined && (options.settings.codexSandbox !== "task-worktree-write"
+      || options.adapterId !== "codex" || !options.codexStructured || options.resume || !options.taskId || !options.worktreePath)) {
+      throw new Error("Codex task sandbox requires a fresh protected structured task session");
+    }
     if (options.codexStructured) return this.spawnStructured(options);
     if (this.activeCount() >= this.concurrencyCeiling) {
       throw new CliConcurrencyLimitError(this.concurrencyCeiling, this.sessions.size);
@@ -588,6 +592,7 @@ export class CliSessionManager {
       await options.beforePtyStart?.(record);
       const scrollback = new ScrollbackRing(this.scrollbackBytes), streams = new Set<LiveByteStream>();
       const transport = new CodexAppServerSession({ command: launch.command, args: [...launch.args, "app-server", "--stdio"], cwd: options.worktreePath, env: this.buildEnv(adapter.buildEnvAllowlist(context)),
+        codexSandbox: options.settings?.codexSandbox === "task-worktree-write" ? "task-worktree-write" : undefined,
         model: typeof options.settings?.model === "string" ? options.settings.model : undefined,
         modelProvider: typeof options.settings?.modelProvider === "string" ? options.settings.modelProvider : undefined,
         onIdentity: async identity => {

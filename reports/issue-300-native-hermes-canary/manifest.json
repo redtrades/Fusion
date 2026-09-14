@@ -1,0 +1,22 @@
+[
+  {
+    "file": "native-session-export.jsonl.gz",
+    "rawSha256": "33eb2940108bea83361732c40b53ae976c90bd9b8dcf3462b12ad170534b3c20",
+    "gzipSha256": "e1ac2a791d3b13221eefd4a94a82c22b18cbd55e3ef77209adf19757cd460550"
+  },
+  {
+    "file": "verified-receipt.json.gz",
+    "rawSha256": "02c36fe1c4f28f8b5f4a6ea556c1a0e4e493aa4573a8836a32e84de66d7d7f3a",
+    "gzipSha256": "509c0c9c50240372dad71164e67520ff7498b5f49d497d4a436d6c6ad7fd9a50"
+  },
+  {
+    "file": "attempt.json.gz",
+    "rawSha256": "746ac4447e2c4329665909dab14d5db622ca79e4dc78f1116b64a567da3921cc",
+    "gzipSha256": "91a3aa7568aee1a0fb870f1f5bb6dcc64eb676f3c46756f21802a7e534d2eb7b"
+  },
+  {
+    "file": "canary.mjs.gz",
+    "rawSha256": "862a5053806680f61da74faf151d3e4927678d89e0b6fa35c37d036e360c8825",
+    "gzipSha256": "ed40e7a314d55c7dee38c0654270e21b338b51e65c18c46df3e721e62cabda2d"
+  }
+]

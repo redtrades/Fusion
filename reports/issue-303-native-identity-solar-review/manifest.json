@@ -1,0 +1,89 @@
+{
+  "head": "c7d04532315ce85fd072a33f4446b79edb905065",
+  "base": "379c94d5e7c3bb824baf9b5c3705781904848c36",
+  "files": {
+    ".changeset/observed-native-review-identity.md": {
+      "sha256": "b2f6c9fdcda16f02f43491e6152aa4f8e809464a63bc319c9f49c08cb026cb9e",
+      "blob": "e3925921c562fcd4ce55032cfab3b91fc33280e3",
+      "bytes": 268
+    },
+    "packages/core/src/__tests__/postgres/cli-token-usage-fenced.pg.test.ts": {
+      "sha256": "ed4ed6cc62e29acf0b7f6c77a72008244c5c52e41a7012cb65afcacd2df7627f",
+      "blob": "973c7eb87b07c6894215e26ac393de06806f62aa",
+      "bytes": 12952
+    },
+    "packages/core/src/cli/cli-token-usage-types.ts": {
+      "sha256": "dfc20b727c0c5d526f7f4518cd53eece5467f4ce75b2ecde57416b8c4aefbc6f",
+      "blob": "ad7fe10677a81b999ad3e833cd87462d1f4b2482",
+      "bytes": 7091
+    },
+    "packages/core/src/index.ts": {
+      "sha256": "b591ff6b692c11e80403f86f9e360dfa721323b44b2b90d8850e01ae63063e38",
+      "blob": "077419e7ea066682abae025f3bc8ab02774d8bf6",
+      "bytes": 120559
+    },
+    "packages/core/src/task-store/cli-token-usage-ops.ts": {
+      "sha256": "fa977a7f03b5aca4f50953e1ea0a7a1f995becc291852b0f47a2d3b23370980d",
+      "blob": "c9c00293f8b5444632686df11068e4a68fad25ed",
+      "bytes": 10476
+    },
+    "packages/engine/src/__tests__/cli-observed-identity.test.ts": {
+      "sha256": "dec2c7de7765c11b8f3088698a391a53979af31a6d5c5857da7258a35b821e41",
+      "blob": "f94490f6f5a4701ad9bc7c8e7e3b263354d36666",
+      "bytes": 8348
+    },
+    "packages/engine/src/__tests__/cli-token-budget-capability.test.ts": {
+      "sha256": "2b4694e5237ea193583b27e3bf55f811e87592fd3b99a278872029b752e1d285",
+      "blob": "9f51847410106df3f528ebb0b3421831ae4cb42c",
+      "bytes": 4088
+    },
+    "packages/engine/src/__tests__/codex-structured-handshake.test.ts": {
+      "sha256": "f5b241d0026ba2dec5d45d7bf233f8865cb636c9ce4860d8de75edcc329757dc",
+      "blob": "01c188ae43c01b2204657ebe07234a1f6a98458e",
+      "bytes": 3860
+    },
+    "packages/engine/src/cli-agent/codex-app-server-session.ts": {
+      "sha256": "1133710bcdf11e7a0b796d353e55029d7bc8e14322abb0799c8288dcf482582a",
+      "blob": "3cb925b8ac2f2acd76697d2226abd2994aa1b1e7",
+      "bytes": 11231
+    },
+    "packages/engine/src/cli-agent/task-session.ts": {
+      "sha256": "b8e19353cc1d681779bd0cbd56f70d4b0662d4b5944ac86ffa7919444a4b9a91",
+      "blob": "fc6023ced20d52061e26619504c987359a9be3d2",
+      "bytes": 29036
+    },
+    "packages/engine/src/cli-agent/token-budget-capability.ts": {
+      "sha256": "7b705c1c8895f87d12aa1e8b57634116eefa4a967e6096ce1bd069b199448717",
+      "blob": "4e1d15343865946ba5c1121bfa22c0c2ff705e7f",
+      "bytes": 3164
+    },
+    "packages/engine/src/cli-agent/token-usage-observer.ts": {
+      "sha256": "d26c4fae8271df298244f09392bcd77ea434abbddee5efe9ac59fe5ea248285d",
+      "blob": "7ff6ee3e7ee554b9520f683f94a665d4cea84ceb",
+      "bytes": 16662
+    },
+    "packages/engine/src/cli-agent/token-usage.ts": {
+      "sha256": "1273d8ffff20551432868e6479f2fb1c877fbc5fa526a34f2d6185f44693ecc7",
+      "blob": "e63aacf528ca191bac1380e4bf54219c0db3e8c8",
+      "bytes": 2483
+    },
+    "reports/issue-303-native-identity/HANDOFF.md": {
+      "sha256": "ca0f98b264bcc43ae0986d72ad41350d3de4ca15f0e35f8e6d1e6c51cee4c270",
+      "blob": "19b8d8e752c4893fb0f9c96a8d74f6952b6a1f84",
+      "bytes": 4424
+    },
+    "reports/issue-303-native-identity/PLAN.md": {
+      "sha256": "0a4bd5960e4f2295b3fe49f19b277ac84f7a76c1dcc64f3526ee7ed2ca0602b5",
+      "blob": "d573a7ba20add1a72581d30e5e945feece468dce",
+      "bytes": 9889
+    },
+    "AGENTS.md": {
+      "sha256": "1a82d06f7a689cc064d684cc4bf1ddb722e084f3001a1d8d2e009f6245ef6500",
+      "blob": "944b1f400912946af02012d75391da79df33d83c",
+      "bytes": 70632
+    }
+  },
+  "promptBytes": 275903,
+  "promptSha256": "79383d44a0b39725f1a81887232079e8806f5a0633b30af0854bb5c6a6d0e2eb",
+  "diffSha256": "3df3f53dbf7dbcf20f1dbaa11675516050cb6695de635819df88207ccff9ab28"
+}

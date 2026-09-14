@@ -1,0 +1,14 @@
+[
+  {
+    "file": "300-hermes-launch-root-tests.log.gz",
+    "uncompressedSha256": "8b7136fe51a93a2d19f145fb5e62e1e368e1794c0b195efe81e9bfbd4192d1b5"
+  },
+  {
+    "file": "300-hermes-launch-root-typecheck.log.gz",
+    "uncompressedSha256": "6e72f28b2472d78b237b9091c2d517a6e6f309a29f2346461c95d9b235b1a329"
+  },
+  {
+    "file": "300-hermes-launch-integrated-build.log.gz",
+    "uncompressedSha256": "8f739481ff372f1f01f5bced139eceff2186163b54eaa97906f7fd8d26b51db0"
+  }
+]

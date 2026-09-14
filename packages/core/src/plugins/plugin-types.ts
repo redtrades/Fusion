@@ -1,3 +1,4 @@
+import type { CliTokenBudgetQuery, CliTokenBudgetInspection } from "../cli/cli-token-usage-types.js";
 /**
  * Plugin System Type Definitions for Fusion
  *
@@ -300,6 +301,8 @@ export interface PluginContext {
    * not readiness. No session enumeration, writes or runtime construction.
    */
   readCliSession?: (sessionId: string) => Promise<CliSession | undefined>;
+  /** Current admitted native accounting capability; native hook readiness is checked before prompt injection. */
+  readCliTokenBudget?: (input: CliTokenBudgetQuery) => Promise<CliTokenBudgetInspection>;
   /** Plugin's own settings */
   settings: Record<string, unknown>;
   /** Structured logger */

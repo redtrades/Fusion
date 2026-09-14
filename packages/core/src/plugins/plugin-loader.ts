@@ -158,6 +158,7 @@ export interface PluginLoaderOptions {
   taskStore: TaskStore;
   /** Late project-scoped native reader; it must not create a runtime/cache. */
   readCliSession?: PluginContext["readCliSession"];
+  readCliTokenBudget?: PluginContext["readCliTokenBudget"];
   /** Additional directories to scan for plugins */
   pluginDirs?: string[];
   /** npm prefix for resolving packages */
@@ -308,6 +309,22 @@ export class PluginLoader extends EventEmitter<{
     return readers.values().next().value!;
   }
 
+  private resolveCliTokenBudgetReader(pluginId: string, projectRoot: string, contextPlugin: FusionPlugin | undefined): NonNullable<PluginContext["readCliTokenBudget"]> {
+    if (!contextPlugin || this.plugins.get(pluginId) !== contextPlugin || resolve(this.getProjectRoot()) !== projectRoot) throw new Error("Native CLI accounting unavailable");
+    const readers = new Set<NonNullable<PluginContext["readCliTokenBudget"]>>();
+    if (this.options.readCliTokenBudget) readers.add(this.options.readCliTokenBudget);
+    if (this.options.lifecycleScope !== "isolated") {
+      for (const lifecycle of PluginLoader.processPluginLifecycles.values()) {
+        if (!lifecycle.participants.has(this)) continue;
+        for (const participant of lifecycle.participants) {
+          if (resolve(participant.getProjectRoot()) === projectRoot && participant.plugins.get(pluginId) === contextPlugin && participant.options.readCliTokenBudget) readers.add(participant.options.readCliTokenBudget);
+        }
+      }
+    }
+    if (readers.size !== 1) throw new Error("Native CLI accounting unavailable or ambiguous");
+    return readers.values().next().value!;
+  }
+
   async createRouteContext(
     pluginId: string,
     overrides?: Partial<Pick<PluginContext, "taskStore" | "settings" | "resolveProjectTaskStore" | "emitEvent">>,
@@ -338,6 +355,7 @@ export class PluginLoader extends EventEmitter<{
       pluginId,
       taskStore: createPluginGatedTaskStore(rawTaskStore, { pluginId, permissions }),
       readCliSession: async (sessionId) => this.resolveCliSessionReader(pluginId, projectRoot, contextPlugin)(sessionId),
+      readCliTokenBudget: async (input) => this.resolveCliTokenBudgetReader(pluginId, projectRoot, contextPlugin)(input),
       settings: overrides?.settings ?? await this.getPluginSettings(pluginId),
       logger: this.createLogger(pluginId),
       createAiSession,

@@ -100,6 +100,8 @@ export interface CodexLaunchSettings {
    * delivered session-scoped without touching the user's config.
    */
   notifyProgram?: string;
+  /** Stable native hook command argv; no credentials are embedded. */
+  notifyCommand?: readonly string[];
   /**
    * Optional layered `CODEX_HOME` directory for callers that prefer a scratch
    * config dir over the `-c` override (see {@link codexSessionHomeLayout}). When
@@ -159,7 +161,8 @@ function buildBaseArgs(ctx: CliAdapterLaunchContext): { command: string; args: s
     // Model is set via a config override so it composes with `-c notify`.
     args.push("-c", `model=${JSON.stringify(settings.model)}`);
   }
-  args.push(...buildNotifyOverrideArg(settings.notifyProgram));
+  if (settings.notifyCommand?.length) args.push("-c", `notify=${JSON.stringify(settings.notifyCommand)}`);
+  else args.push(...buildNotifyOverrideArg(settings.notifyProgram));
   return { command, args };
 }
 
@@ -667,7 +670,8 @@ export const codexAdapter: CliAgentAdapter = {
     if (typeof settings.model === "string" && settings.model.length > 0) {
       args.push("-c", `model=${JSON.stringify(settings.model)}`);
     }
-    args.push(...buildNotifyOverrideArg(settings.notifyProgram));
+    if (settings.notifyCommand?.length) args.push("-c", `notify=${JSON.stringify(settings.notifyCommand)}`);
+  else args.push(...buildNotifyOverrideArg(settings.notifyProgram));
     appendPostureFlags(args, ctx);
     if (settings.extraArgs) args.push(...settings.extraArgs);
     return { command, args };

@@ -224,6 +224,24 @@ export class TelemetryHub {
     this.onEvent = listener;
   }
 
+  private nativeIdentityListeners = new Map<string, (identity: { nativeSessionId: string; transcriptPath: string }) => void>();
+
+  /** Internal authenticated hook transport; paths never enter generic telemetry. */
+  registerNativeIdentityListener(sessionId: string, listener: (identity: { nativeSessionId: string; transcriptPath: string }) => void): () => void {
+    if (this.nativeIdentityListeners.has(sessionId)) throw new Error("Native identity observer already registered");
+    this.nativeIdentityListeners.set(sessionId, listener);
+    return () => { if (this.nativeIdentityListeners.get(sessionId) === listener) this.nativeIdentityListeners.delete(sessionId); };
+  }
+
+  ingestNativeSessionStart(sessionId: string, identity: { nativeSessionId: string; transcriptPath: string }): void {
+    if (!this.sessions.has(sessionId)) return;
+    if (!identity.nativeSessionId || identity.nativeSessionId.length > 256 || !identity.transcriptPath.startsWith("/") || identity.transcriptPath.length > 4096) throw new Error("Invalid native session identity");
+    const record = this.store.getSession(sessionId);
+    if (!record || (record.nativeSessionId && record.nativeSessionId !== identity.nativeSessionId)) throw new Error("Native session identity changed");
+    this.store.updateSession(sessionId, { nativeSessionId: identity.nativeSessionId });
+    this.nativeIdentityListeners.get(sessionId)?.(identity);
+  }
+
   // ── Token registry ─────────────────────────────────────────────────────────
 
   /**
@@ -264,6 +282,7 @@ export class TelemetryHub {
     this.tokenToSession.delete(entry.token);
     entry.machine.dispose();
     this.sessions.delete(sessionId);
+    this.nativeIdentityListeners.delete(sessionId);
   }
 
   /**
@@ -373,7 +392,7 @@ export class TelemetryHub {
     // Capture native session id whenever reported.
     if (event.nativeSessionId) {
       const current = this.store.getSession(entry.machine.sessionId);
-      if (current && current.nativeSessionId !== event.nativeSessionId) {
+      if (current && !current.nativeSessionId) {
         this.store.updateSession(entry.machine.sessionId, {
           nativeSessionId: event.nativeSessionId,
         });

@@ -1,3 +1,4 @@
+import { inspectCliTokenBudget } from "../cli-agent/token-budget-capability.js";
 import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
 import type {
@@ -1156,6 +1157,7 @@ export class InProcessRuntime
       this.pluginLoader = new PluginLoaderClass({
         pluginStore: this.pluginStore,
         taskStore: this.taskStore,
+        readCliTokenBudget: (input) => inspectCliTokenBudget(this.taskStore!, this.cliAgentRuntime?.bundle.store, input),
         readCliSession: createProjectCliSessionReader(this.config.projectId, () => this.cliAgentRuntime?.bundle.store),
       });
 

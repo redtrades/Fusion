@@ -18,7 +18,7 @@ function fixture() {
   const node: WorkflowIrNode = { id: "implement", kind: "prompt" };
   const reap = vi.fn(async () => {});
   const deps = {
-    store: { logEntry: vi.fn(async () => {}) },
+    store: { logEntry: vi.fn(async () => {}), getTask: async () => live, getSettingsByScope: async () => ({ project: {}, global: {} }) },
     getRunContextFor: () => undefined,
     activeCliTaskSessions: new Map(),
     cliAgentRuntime: { manager: {}, hub: {}, registry: {}, store: {}, projectId: "fixture-project", hookEndpointUrl: "http://fixture.invalid" },
@@ -29,6 +29,14 @@ function fixture() {
 
 describe("native CLI node session receipt", () => {
   beforeEach(() => { launch.mockReset(); killLive.mockReset(); });
+
+  it("refuses another native launch after the observed budget is exhausted", async () => {
+    const f = fixture();
+    f.live.tokenBudgetOverride = { hard: 5 };
+    f.live.tokenUsage = { inputTokens: 5, outputTokens: 0, cachedTokens: 1000, cacheWriteTokens: 0, totalTokens: 1005, firstUsedAt: "", lastUsedAt: "" };
+    expect(await runCliAgentNode(f.deps, f.node, f.live, f.config)).toEqual({ outcome: "failure", value: "cli-agent-token-budget-exhausted" });
+    expect(launch).not.toHaveBeenCalled();
+  });
 
   it.each([
     ["success", "success", "cli-agent-done"],

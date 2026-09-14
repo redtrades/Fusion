@@ -282,6 +282,8 @@ type WriteJob =
 // ── Session spawn options ───────────────────────────────────────────────────
 
 export interface SpawnCliSessionOptions {
+  /** Native-only preparation after durable record creation and before child startup. */
+  beforePtyStart?: (record: CliSession) => Promise<{ hookContextPath?: string } | void>;
   /** Adapter id to drive the session (resolved against the registry). */
   adapterId: string;
   /** Project the session belongs to. */
@@ -452,6 +454,7 @@ export class CliSessionManager {
       launch = adapter.buildResume({ ...launchCtx, nativeSessionId: options.resume.nativeSessionId });
       const existing = this.store.getSession(options.resume.sessionId);
       if (!existing) throw new UnknownCliSessionError(options.resume.sessionId);
+      if (existing.autonomyPosture?.cliTokenBudgetProtocol && !options.beforePtyStart) throw new Error("Protected CLI resume requires fresh native usage admission");
       // Move the reused record back to "starting" for the relaunch.
       record = this.store.updateSession(options.resume.sessionId, {
         agentState: "starting",
@@ -478,8 +481,16 @@ export class CliSessionManager {
     // engine crash between spawn and the queued write would defeat recovery.
     await this.store.flush();
 
+    let prepared: { hookContextPath?: string } | void;
+    try { prepared = await options.beforePtyStart?.(record); }
+    catch (error) {
+      this.store.updateSession(record.id, { agentState: "dead", terminationReason: "crashed" });
+      await this.store.flush().catch(() => {});
+      throw error;
+    }
     const allowlist = adapter.buildEnvAllowlist(launchCtx);
     const env = this.buildEnv(allowlist);
+    if (prepared?.hookContextPath) env.FUSION_CLI_HOOK_CONTEXT = prepared.hookContextPath;
 
     const pty = await this.loadPty();
     let child: IPty;

@@ -1,0 +1,100 @@
+{
+  "sourceRevision": "a83b0e29218c55f35d87fe4b7b745d037b09f51e",
+  "mode": "admit-only",
+  "startedAt": "2026-09-14T05:47:23.301Z",
+  "promptAttempts": 1,
+  "promptSent": false,
+  "accountingAccepted": false,
+  "checkpoints": [
+    {
+      "sessionId": "cli-a793b56c",
+      "nativeSessionId": "01a09e74-b509-7dd0-99b9-79f1240ef007",
+      "fresh": true,
+      "reaffirm": false,
+      "baseline": false,
+      "cursor": {
+        "phase": "awaiting-file",
+        "bytes": 0,
+        "transcriptPath": "/Users/man/.codex/sessions/2026/09/14/rollout-2026-09-14T01-47-23-01a09e74-b509-7dd0-99b9-79f1240ef007.jsonl"
+      },
+      "observations": [],
+      "hardExceeded": false,
+      "observedWorkTokens": 0
+    },
+    {
+      "sessionId": "cli-a793b56c",
+      "nativeSessionId": "01a09e74-b509-7dd0-99b9-79f1240ef007",
+      "fresh": false,
+      "reaffirm": true,
+      "baseline": false,
+      "cursor": {
+        "phase": "awaiting-file",
+        "bytes": 0,
+        "transcriptPath": "/Users/man/.codex/sessions/2026/09/14/rollout-2026-09-14T01-47-23-01a09e74-b509-7dd0-99b9-79f1240ef007.jsonl"
+      },
+      "observations": [],
+      "hardExceeded": false,
+      "observedWorkTokens": 0
+    }
+  ],
+  "metadataOnly": true,
+  "projectId": "proj_4a361e4089e74d61",
+  "taskId": "KB-002",
+  "lease": {
+    "runId": "issue303-native-admission",
+    "leaseEpoch": 1,
+    "agentId": "agent-7ad42ea9",
+    "nodeId": "agents303-native-pilot"
+  },
+  "worktree": "/tmp/agents303-pilot-state-tmnayD/task-worktrees/kb-002",
+  "head": "6a4e977d764365c4da5597ffacaceea000cd1fec",
+  "requestedModel": "gpt-6-astra",
+  "requestedProvider": "openai",
+  "preflight": {
+    "resolvedBudget": {
+      "hard": 50000,
+      "source": "task-override"
+    },
+    "finitePositiveHard": true,
+    "observedWorkTokens": 0,
+    "taskPaused": false,
+    "column": "inbox",
+    "taskBudgetOverride": {
+      "hard": 50000
+    },
+    "projectBudget": null,
+    "globalBudget": null,
+    "taskAutoMerge": false
+  },
+  "before": {
+    "protocol": "native-cli-observed-v1",
+    "hardLimit": 50000,
+    "observedWorkTokens": 0,
+    "launchGate": "native-structured-identity-before-prompt"
+  },
+  "nativeSession": {
+    "id": "cli-a793b56c",
+    "nativeSessionId": "01a09e74-b509-7dd0-99b9-79f1240ef007"
+  },
+  "outcome": {
+    "kind": "killed",
+    "sessionId": "cli-a793b56c",
+    "terminationReason": "killed"
+  },
+  "after": {
+    "protocol": "native-cli-observed-v1",
+    "hardLimit": 50000,
+    "observedWorkTokens": 0,
+    "launchGate": "native-structured-identity-before-prompt",
+    "session": {
+      "sessionId": "cli-a793b56c",
+      "nativeSessionId": "01a09e74-b509-7dd0-99b9-79f1240ef007",
+      "phase": "awaiting-file",
+      "workTokens": 0
+    }
+  },
+  "usageDelta": 0,
+  "noTurnAdmissionEstablished": true,
+  "cleanedUp": true,
+  "finishedAt": "2026-09-14T05:47:24.010Z"
+}

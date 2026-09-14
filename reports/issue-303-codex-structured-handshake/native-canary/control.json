@@ -1,0 +1,9 @@
+{
+  "sourceRevision": "a83b0e29218c55f35d87fe4b7b745d037b09f51e",
+  "exclusivePilotDatabase": true,
+  "allowOneRequest": false,
+  "model": "gpt-6-astra",
+  "modelProvider": "openai",
+  "expectedHardLimit": 50000,
+  "prompt": "Reply exactly CANARY_OK. Do not use any tools or modify files."
+}

@@ -1,0 +1,21 @@
+{
+  "sourceRevision": "a83b0e29218c55f35d87fe4b7b745d037b09f51e",
+  "projectId": "proj_4a361e4089e74d61",
+  "taskId": "KB-002",
+  "lease": {
+    "runId": "issue303-native-admission",
+    "leaseEpoch": 1,
+    "agentId": "agent-7ad42ea9",
+    "nodeId": "agents303-native-pilot"
+  },
+  "head": "6a4e977d764365c4da5597ffacaceea000cd1fec",
+  "previousOverride": null,
+  "targetOverride": {
+    "hard": 50000
+  },
+  "preparedAt": "2026-09-14T05:46:41.716Z",
+  "applied": true,
+  "appliedAt": "2026-09-14T05:46:41.746Z",
+  "restored": true,
+  "restoredAt": "2026-09-14T05:49:00.939Z"
+}

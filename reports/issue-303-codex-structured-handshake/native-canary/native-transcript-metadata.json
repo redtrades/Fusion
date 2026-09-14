@@ -1,0 +1,66 @@
+{
+  "path": "/Users/man/.codex/sessions/2026/09/14/rollout-2026-09-14T01-47-47-01a09e75-0fe2-7271-bcef-275e04224246.jsonl",
+  "metadata": [
+    {
+      "id": "01a09e75-0fe2-7271-bcef-275e04224246",
+      "cwd": "/tmp/agents303-pilot-state-tmnayD/task-worktrees/kb-002",
+      "model_provider": "openai",
+      "cli_version": "0.154.0"
+    }
+  ],
+  "turns": [
+    {
+      "turn_id": "01a09e75-1087-7682-b453-a43d88f2c01c",
+      "model": "gpt-6-astra",
+      "model_provider": null,
+      "cwd": "/tmp/agents303-pilot-state-tmnayD/task-worktrees/kb-002"
+    }
+  ],
+  "recordCounts": [
+    {
+      "type": "session_meta",
+      "payloadType": null,
+      "count": 1
+    },
+    {
+      "type": "event_msg",
+      "payloadType": "task_started",
+      "count": 1
+    },
+    {
+      "type": "response_item",
+      "payloadType": "message",
+      "count": 6
+    },
+    {
+      "type": "world_state",
+      "payloadType": null,
+      "count": 1
+    },
+    {
+      "type": "turn_context",
+      "payloadType": null,
+      "count": 1
+    },
+    {
+      "type": "event_msg",
+      "payloadType": "item_completed",
+      "count": 2
+    },
+    {
+      "type": "token_usage_record",
+      "payloadType": null,
+      "count": 1
+    },
+    {
+      "type": "event_msg",
+      "payloadType": "token_count",
+      "count": 1
+    },
+    {
+      "type": "event_msg",
+      "payloadType": "task_complete",
+      "count": 1
+    }
+  ]
+}

@@ -1,0 +1,446 @@
+{
+  "sourceRevision": "a83b0e29218c55f35d87fe4b7b745d037b09f51e",
+  "mode": "one-request",
+  "startedAt": "2026-09-14T05:47:46.565Z",
+  "promptAttempts": 1,
+  "promptSent": true,
+  "accountingAccepted": true,
+  "checkpoints": [
+    {
+      "sessionId": "cli-8bd28f55",
+      "nativeSessionId": "01a09e75-0fe2-7271-bcef-275e04224246",
+      "fresh": true,
+      "reaffirm": false,
+      "baseline": false,
+      "cursor": {
+        "phase": "awaiting-file",
+        "bytes": 0,
+        "transcriptPath": "/Users/man/.codex/sessions/2026/09/14/rollout-2026-09-14T01-47-47-01a09e75-0fe2-7271-bcef-275e04224246.jsonl"
+      },
+      "observations": [],
+      "hardExceeded": false,
+      "observedWorkTokens": 0
+    },
+    {
+      "sessionId": "cli-8bd28f55",
+      "nativeSessionId": "01a09e75-0fe2-7271-bcef-275e04224246",
+      "fresh": false,
+      "reaffirm": true,
+      "baseline": false,
+      "cursor": {
+        "phase": "awaiting-file",
+        "bytes": 0,
+        "transcriptPath": "/Users/man/.codex/sessions/2026/09/14/rollout-2026-09-14T01-47-47-01a09e75-0fe2-7271-bcef-275e04224246.jsonl"
+      },
+      "observations": [],
+      "hardExceeded": false,
+      "observedWorkTokens": 0
+    },
+    {
+      "sessionId": "cli-8bd28f55",
+      "nativeSessionId": "01a09e75-0fe2-7271-bcef-275e04224246",
+      "fresh": false,
+      "reaffirm": false,
+      "baseline": false,
+      "cursor": {
+        "transcriptPath": "/Users/man/.codex/sessions/2026/09/14/rollout-2026-09-14T01-47-47-01a09e75-0fe2-7271-bcef-275e04224246.jsonl",
+        "bytes": 22460,
+        "fileIdentity": "16777234:76539538",
+        "phase": "observing"
+      },
+      "observations": [],
+      "hardExceeded": false,
+      "observedWorkTokens": 0
+    },
+    {
+      "sessionId": "cli-8bd28f55",
+      "nativeSessionId": "01a09e75-0fe2-7271-bcef-275e04224246",
+      "fresh": false,
+      "reaffirm": false,
+      "baseline": false,
+      "cursor": {
+        "transcriptPath": "/Users/man/.codex/sessions/2026/09/14/rollout-2026-09-14T01-47-47-01a09e75-0fe2-7271-bcef-275e04224246.jsonl",
+        "bytes": 22460,
+        "fileIdentity": "16777234:76539538",
+        "phase": "observing"
+      },
+      "observations": [],
+      "hardExceeded": false,
+      "observedWorkTokens": 0
+    },
+    {
+      "sessionId": "cli-8bd28f55",
+      "nativeSessionId": "01a09e75-0fe2-7271-bcef-275e04224246",
+      "fresh": false,
+      "reaffirm": false,
+      "baseline": false,
+      "cursor": {
+        "transcriptPath": "/Users/man/.codex/sessions/2026/09/14/rollout-2026-09-14T01-47-47-01a09e75-0fe2-7271-bcef-275e04224246.jsonl",
+        "bytes": 22460,
+        "fileIdentity": "16777234:76539538",
+        "phase": "observing"
+      },
+      "observations": [],
+      "hardExceeded": false,
+      "observedWorkTokens": 0
+    },
+    {
+      "sessionId": "cli-8bd28f55",
+      "nativeSessionId": "01a09e75-0fe2-7271-bcef-275e04224246",
+      "fresh": false,
+      "reaffirm": false,
+      "baseline": false,
+      "cursor": {
+        "transcriptPath": "/Users/man/.codex/sessions/2026/09/14/rollout-2026-09-14T01-47-47-01a09e75-0fe2-7271-bcef-275e04224246.jsonl",
+        "bytes": 22460,
+        "fileIdentity": "16777234:76539538",
+        "phase": "observing"
+      },
+      "observations": [],
+      "hardExceeded": false,
+      "observedWorkTokens": 0
+    },
+    {
+      "sessionId": "cli-8bd28f55",
+      "nativeSessionId": "01a09e75-0fe2-7271-bcef-275e04224246",
+      "fresh": false,
+      "reaffirm": false,
+      "baseline": false,
+      "cursor": {
+        "transcriptPath": "/Users/man/.codex/sessions/2026/09/14/rollout-2026-09-14T01-47-47-01a09e75-0fe2-7271-bcef-275e04224246.jsonl",
+        "bytes": 22460,
+        "fileIdentity": "16777234:76539538",
+        "phase": "observing"
+      },
+      "observations": [],
+      "hardExceeded": false,
+      "observedWorkTokens": 0
+    },
+    {
+      "sessionId": "cli-8bd28f55",
+      "nativeSessionId": "01a09e75-0fe2-7271-bcef-275e04224246",
+      "fresh": false,
+      "reaffirm": false,
+      "baseline": false,
+      "cursor": {
+        "transcriptPath": "/Users/man/.codex/sessions/2026/09/14/rollout-2026-09-14T01-47-47-01a09e75-0fe2-7271-bcef-275e04224246.jsonl",
+        "bytes": 22460,
+        "fileIdentity": "16777234:76539538",
+        "phase": "observing"
+      },
+      "observations": [],
+      "hardExceeded": false,
+      "observedWorkTokens": 0
+    },
+    {
+      "sessionId": "cli-8bd28f55",
+      "nativeSessionId": "01a09e75-0fe2-7271-bcef-275e04224246",
+      "fresh": false,
+      "reaffirm": false,
+      "baseline": false,
+      "cursor": {
+        "transcriptPath": "/Users/man/.codex/sessions/2026/09/14/rollout-2026-09-14T01-47-47-01a09e75-0fe2-7271-bcef-275e04224246.jsonl",
+        "bytes": 22460,
+        "fileIdentity": "16777234:76539538",
+        "phase": "observing"
+      },
+      "observations": [],
+      "hardExceeded": false,
+      "observedWorkTokens": 0
+    },
+    {
+      "sessionId": "cli-8bd28f55",
+      "nativeSessionId": "01a09e75-0fe2-7271-bcef-275e04224246",
+      "fresh": false,
+      "reaffirm": false,
+      "baseline": false,
+      "cursor": {
+        "transcriptPath": "/Users/man/.codex/sessions/2026/09/14/rollout-2026-09-14T01-47-47-01a09e75-0fe2-7271-bcef-275e04224246.jsonl",
+        "bytes": 22460,
+        "fileIdentity": "16777234:76539538",
+        "phase": "observing"
+      },
+      "observations": [],
+      "hardExceeded": false,
+      "observedWorkTokens": 0
+    },
+    {
+      "sessionId": "cli-8bd28f55",
+      "nativeSessionId": "01a09e75-0fe2-7271-bcef-275e04224246",
+      "fresh": false,
+      "reaffirm": false,
+      "baseline": false,
+      "cursor": {
+        "transcriptPath": "/Users/man/.codex/sessions/2026/09/14/rollout-2026-09-14T01-47-47-01a09e75-0fe2-7271-bcef-275e04224246.jsonl",
+        "bytes": 22460,
+        "fileIdentity": "16777234:76539538",
+        "phase": "observing"
+      },
+      "observations": [],
+      "hardExceeded": false,
+      "observedWorkTokens": 0
+    },
+    {
+      "sessionId": "cli-8bd28f55",
+      "nativeSessionId": "01a09e75-0fe2-7271-bcef-275e04224246",
+      "fresh": false,
+      "reaffirm": false,
+      "baseline": false,
+      "cursor": {
+        "transcriptPath": "/Users/man/.codex/sessions/2026/09/14/rollout-2026-09-14T01-47-47-01a09e75-0fe2-7271-bcef-275e04224246.jsonl",
+        "bytes": 22460,
+        "fileIdentity": "16777234:76539538",
+        "phase": "observing"
+      },
+      "observations": [],
+      "hardExceeded": false,
+      "observedWorkTokens": 0
+    },
+    {
+      "sessionId": "cli-8bd28f55",
+      "nativeSessionId": "01a09e75-0fe2-7271-bcef-275e04224246",
+      "fresh": false,
+      "reaffirm": false,
+      "baseline": false,
+      "cursor": {
+        "transcriptPath": "/Users/man/.codex/sessions/2026/09/14/rollout-2026-09-14T01-47-47-01a09e75-0fe2-7271-bcef-275e04224246.jsonl",
+        "bytes": 22460,
+        "fileIdentity": "16777234:76539538",
+        "phase": "observing"
+      },
+      "observations": [],
+      "hardExceeded": false,
+      "observedWorkTokens": 0
+    },
+    {
+      "sessionId": "cli-8bd28f55",
+      "nativeSessionId": "01a09e75-0fe2-7271-bcef-275e04224246",
+      "fresh": false,
+      "reaffirm": false,
+      "baseline": false,
+      "cursor": {
+        "transcriptPath": "/Users/man/.codex/sessions/2026/09/14/rollout-2026-09-14T01-47-47-01a09e75-0fe2-7271-bcef-275e04224246.jsonl",
+        "bytes": 112055,
+        "fileIdentity": "16777234:76539538",
+        "phase": "observing"
+      },
+      "observations": [],
+      "hardExceeded": false,
+      "observedWorkTokens": 0
+    },
+    {
+      "sessionId": "cli-8bd28f55",
+      "nativeSessionId": "01a09e75-0fe2-7271-bcef-275e04224246",
+      "fresh": false,
+      "reaffirm": false,
+      "baseline": false,
+      "cursor": {
+        "transcriptPath": "/Users/man/.codex/sessions/2026/09/14/rollout-2026-09-14T01-47-47-01a09e75-0fe2-7271-bcef-275e04224246.jsonl",
+        "bytes": 112055,
+        "fileIdentity": "16777234:76539538",
+        "phase": "observing"
+      },
+      "observations": [],
+      "hardExceeded": false,
+      "observedWorkTokens": 0
+    },
+    {
+      "sessionId": "cli-8bd28f55",
+      "nativeSessionId": "01a09e75-0fe2-7271-bcef-275e04224246",
+      "fresh": false,
+      "reaffirm": false,
+      "baseline": false,
+      "cursor": {
+        "transcriptPath": "/Users/man/.codex/sessions/2026/09/14/rollout-2026-09-14T01-47-47-01a09e75-0fe2-7271-bcef-275e04224246.jsonl",
+        "bytes": 112055,
+        "fileIdentity": "16777234:76539538",
+        "phase": "observing"
+      },
+      "observations": [],
+      "hardExceeded": false,
+      "observedWorkTokens": 0
+    },
+    {
+      "sessionId": "cli-8bd28f55",
+      "nativeSessionId": "01a09e75-0fe2-7271-bcef-275e04224246",
+      "fresh": false,
+      "reaffirm": false,
+      "baseline": false,
+      "cursor": {
+        "transcriptPath": "/Users/man/.codex/sessions/2026/09/14/rollout-2026-09-14T01-47-47-01a09e75-0fe2-7271-bcef-275e04224246.jsonl",
+        "bytes": 112055,
+        "fileIdentity": "16777234:76539538",
+        "phase": "observing"
+      },
+      "observations": [],
+      "hardExceeded": false,
+      "observedWorkTokens": 0
+    },
+    {
+      "sessionId": "cli-8bd28f55",
+      "nativeSessionId": "01a09e75-0fe2-7271-bcef-275e04224246",
+      "fresh": false,
+      "reaffirm": false,
+      "baseline": false,
+      "cursor": {
+        "transcriptPath": "/Users/man/.codex/sessions/2026/09/14/rollout-2026-09-14T01-47-47-01a09e75-0fe2-7271-bcef-275e04224246.jsonl",
+        "bytes": 112055,
+        "fileIdentity": "16777234:76539538",
+        "phase": "observing"
+      },
+      "observations": [],
+      "hardExceeded": false,
+      "observedWorkTokens": 0
+    },
+    {
+      "sessionId": "cli-8bd28f55",
+      "nativeSessionId": "01a09e75-0fe2-7271-bcef-275e04224246",
+      "fresh": false,
+      "reaffirm": false,
+      "baseline": false,
+      "cursor": {
+        "transcriptPath": "/Users/man/.codex/sessions/2026/09/14/rollout-2026-09-14T01-47-47-01a09e75-0fe2-7271-bcef-275e04224246.jsonl",
+        "bytes": 112055,
+        "fileIdentity": "16777234:76539538",
+        "phase": "observing"
+      },
+      "observations": [],
+      "hardExceeded": false,
+      "observedWorkTokens": 0
+    },
+    {
+      "sessionId": "cli-8bd28f55",
+      "nativeSessionId": "01a09e75-0fe2-7271-bcef-275e04224246",
+      "fresh": false,
+      "reaffirm": false,
+      "baseline": false,
+      "cursor": {
+        "transcriptPath": "/Users/man/.codex/sessions/2026/09/14/rollout-2026-09-14T01-47-47-01a09e75-0fe2-7271-bcef-275e04224246.jsonl",
+        "bytes": 112055,
+        "fileIdentity": "16777234:76539538",
+        "phase": "observing"
+      },
+      "observations": [],
+      "hardExceeded": false,
+      "observedWorkTokens": 0
+    },
+    {
+      "sessionId": "cli-8bd28f55",
+      "nativeSessionId": "01a09e75-0fe2-7271-bcef-275e04224246",
+      "fresh": false,
+      "reaffirm": false,
+      "baseline": false,
+      "cursor": {
+        "transcriptPath": "/Users/man/.codex/sessions/2026/09/14/rollout-2026-09-14T01-47-47-01a09e75-0fe2-7271-bcef-275e04224246.jsonl",
+        "bytes": 112055,
+        "fileIdentity": "16777234:76539538",
+        "phase": "observing"
+      },
+      "observations": [],
+      "hardExceeded": false,
+      "observedWorkTokens": 0
+    },
+    {
+      "sessionId": "cli-8bd28f55",
+      "nativeSessionId": "01a09e75-0fe2-7271-bcef-275e04224246",
+      "fresh": false,
+      "reaffirm": false,
+      "baseline": false,
+      "cursor": {
+        "transcriptPath": "/Users/man/.codex/sessions/2026/09/14/rollout-2026-09-14T01-47-47-01a09e75-0fe2-7271-bcef-275e04224246.jsonl",
+        "bytes": 114851,
+        "fileIdentity": "16777234:76539538",
+        "phase": "observing"
+      },
+      "observations": [
+        {
+          "key": "cumulative",
+          "usage": {
+            "inputTokens": 19602,
+            "cachedTokens": 7040,
+            "outputTokens": 7,
+            "cacheWriteTokens": 0
+          }
+        }
+      ],
+      "hardExceeded": false,
+      "observedWorkTokens": 19609
+    },
+    {
+      "sessionId": "cli-8bd28f55",
+      "nativeSessionId": "01a09e75-0fe2-7271-bcef-275e04224246",
+      "fresh": false,
+      "reaffirm": false,
+      "baseline": false,
+      "cursor": {
+        "transcriptPath": "/Users/man/.codex/sessions/2026/09/14/rollout-2026-09-14T01-47-47-01a09e75-0fe2-7271-bcef-275e04224246.jsonl",
+        "bytes": 114851,
+        "fileIdentity": "16777234:76539538",
+        "phase": "drained"
+      },
+      "observations": [],
+      "hardExceeded": false,
+      "observedWorkTokens": 19609
+    }
+  ],
+  "metadataOnly": true,
+  "projectId": "proj_4a361e4089e74d61",
+  "taskId": "KB-002",
+  "lease": {
+    "runId": "issue303-native-admission",
+    "leaseEpoch": 1,
+    "agentId": "agent-7ad42ea9",
+    "nodeId": "agents303-native-pilot"
+  },
+  "worktree": "/tmp/agents303-pilot-state-tmnayD/task-worktrees/kb-002",
+  "head": "6a4e977d764365c4da5597ffacaceea000cd1fec",
+  "requestedModel": "gpt-6-astra",
+  "requestedProvider": "openai",
+  "preflight": {
+    "resolvedBudget": {
+      "hard": 50000,
+      "source": "task-override"
+    },
+    "finitePositiveHard": true,
+    "observedWorkTokens": 0,
+    "taskPaused": false,
+    "column": "inbox",
+    "taskBudgetOverride": {
+      "hard": 50000
+    },
+    "projectBudget": null,
+    "globalBudget": null,
+    "taskAutoMerge": false
+  },
+  "before": {
+    "protocol": "native-cli-observed-v1",
+    "hardLimit": 50000,
+    "observedWorkTokens": 0,
+    "launchGate": "native-structured-identity-before-prompt"
+  },
+  "nativeSession": {
+    "id": "cli-8bd28f55",
+    "nativeSessionId": "01a09e75-0fe2-7271-bcef-275e04224246"
+  },
+  "modelRequestAttempted": true,
+  "outcome": {
+    "kind": "success",
+    "sessionId": "cli-8bd28f55",
+    "terminationReason": "completed"
+  },
+  "after": {
+    "protocol": "native-cli-observed-v1",
+    "hardLimit": 50000,
+    "observedWorkTokens": 19609,
+    "launchGate": "native-structured-identity-before-prompt",
+    "session": {
+      "sessionId": "cli-8bd28f55",
+      "nativeSessionId": "01a09e75-0fe2-7271-bcef-275e04224246",
+      "phase": "drained",
+      "workTokens": 19609
+    }
+  },
+  "usageDelta": 19609,
+  "cleanedUp": true,
+  "finishedAt": "2026-09-14T05:47:52.154Z"
+}

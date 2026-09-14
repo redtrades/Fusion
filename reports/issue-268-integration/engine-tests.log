@@ -1,0 +1,55 @@
+
+ RUN  v4.1.10 /Users/man/worktrees/Fusion/300-live-integration/packages/engine
+
+ ✓ |engine-default| src/__tests__/reset-branch-cleanup.test.ts > task reset branch cleanup > deletes a recorded branch 3ms
+ ✓ |engine-default| src/__tests__/reset-branch-cleanup.test.ts > task reset branch cleanup > enumerates the canonical namespace when no branch is recorded 1ms
+ ✓ |engine-default| src/__tests__/reset-branch-cleanup.test.ts > task reset branch cleanup > deletes foreach step branches alongside the working branch 0ms
+ ✓ |engine-default| src/__tests__/reset-branch-cleanup.test.ts > task reset branch cleanup > deletes a branch once when recorded and enumerated 1ms
+ ✓ |engine-default| src/__tests__/reset-branch-cleanup.test.ts > task reset branch cleanup > treats an absent branch as a no-op 1ms
+ ✓ |engine-default| src/__tests__/reset-branch-cleanup.test.ts > task reset branch cleanup > retains an operator-supplied branch without blocking 0ms
+ ✓ |engine-default| src/__tests__/reset-branch-cleanup.test.ts > task reset branch cleanup > retains a shared merge target while deleting the member branch 0ms
+ ✓ |engine-default| src/__tests__/reset-branch-cleanup.test.ts > task reset branch cleanup > blocks a task branch held by a foreign registered worktree 0ms
+ ✓ |engine-default| src/__tests__/reset-branch-cleanup.test.ts > task reset branch cleanup > classifies a registered Reset target as deletable instead of checked out 1ms
+ ✓ |engine-default| src/__tests__/reset-branch-cleanup.test.ts > task reset branch cleanup > blocks when the primary checkout holds the branch 0ms
+ ✓ |engine-default| src/__tests__/reset-branch-cleanup.test.ts > task reset branch cleanup > records delete-failed when git rejects deletion 0ms
+ ✓ |engine-default| src/__tests__/reset-branch-cleanup.test.ts > task reset branch cleanup > records still-present when a deleted branch continues to resolve 0ms
+ ✓ |engine-default| src/__tests__/reset-branch-cleanup.test.ts > task reset branch cleanup > blocks when post-delete absence verification fails 0ms
+ ✓ |engine-default| src/__tests__/reset-branch-cleanup.test.ts > task reset branch cleanup > continues to a second repository when the first blocks 0ms
+ ✓ |engine-default| src/__tests__/reset-branch-cleanup.test.ts > task reset branch cleanup > plans without invoking branch deletion 0ms
+ ✓ |engine-default| src/__tests__/reset-worktree-removal.test.ts > reconcileTaskResetSessionRoot > resolves when the coordinator has no registry entry 1ms
+ ✓ |engine-default| src/__tests__/reset-worktree-removal.test.ts > reconcileTaskResetSessionRoot > reconciles an aged dead self-owned coordinator entry 0ms
+ ✓ |engine-default| src/__tests__/reset-worktree-removal.test.ts > reconcileTaskResetSessionRoot > refuses a live self-owned coordinator entry and leaves it registered 1ms
+ ✓ |engine-default| src/__tests__/reset-worktree-removal.test.ts > reconcileTaskResetSessionRoot > reports a foreign coordinator holder 1ms
+ ✓ |engine-default| src/__tests__/reset-worktree-removal.test.ts > reconcileTaskResetSessionRoot > waits once for a recent coordinator entry by default 1ms
+ ✓ |engine-default| src/__tests__/reset-worktree-removal.test.ts > reconcileTaskResetSessionRoot > immediately refuses a recent point-of-use entry without waiting 1ms
+ ✓ |engine-default| src/__tests__/reset-worktree-removal.test.ts > removeTaskResetWorktree > reconciles an aged dead self-owned planning entry before removal 0ms
+ ✓ |engine-default| src/__tests__/reset-worktree-removal.test.ts > removeTaskResetWorktree > waits once for a recent stale entry and then removes it 1ms
+ ✓ |engine-default| src/__tests__/reset-worktree-removal.test.ts > removeTaskResetWorktree > refuses an aged live planning holder without removing it 1ms
+ ✓ |engine-default| src/__tests__/reset-worktree-removal.test.ts > removeTaskResetWorktree > refuses a foreign holder without calling removal 0ms
+ ✓ |engine-default| src/__tests__/reset-worktree-removal.test.ts > removeTaskResetWorktree > re-applies liveness gates before its single post-removal race retry 0ms
+ ✓ |engine-default| src/__tests__/worktree-pool.test.ts > scanIdleWorktrees > correctly identifies idle vs active worktrees 4ms
+ ✓ |engine-default| src/__tests__/worktree-pool.test.ts > scanIdleWorktrees > handles empty .worktrees/ directory 0ms
+ ✓ |engine-default| src/__tests__/worktree-pool.test.ts > scanIdleWorktrees > handles missing .worktrees/ directory 0ms
+ ✓ |engine-default| src/__tests__/worktree-pool.test.ts > scanIdleWorktrees > treats in-review tasks as active (worktree preserved) 0ms
+ ✓ |engine-default| src/__tests__/worktree-pool.test.ts > scanIdleWorktrees > returns all worktrees when no tasks exist 1ms
+ ✓ |engine-default| src/__tests__/worktree-pool.test.ts > scanIdleWorktrees > returns empty array when readdirSync throws 1ms
+ ✓ |engine-default| src/__tests__/worktree-pool.test.ts > scanIdleWorktrees > excludes internal containers even when git lists their children 0ms
+ ✓ |engine-default| src/__tests__/worktree-pool.test.ts > scanIdleWorktrees > does not return unregistered directories for pool rehydration 0ms
+ ✓ |engine-default| src/__tests__/worktree-pool.test.ts > cleanupOrphanedWorktrees > removes worktrees not assigned to any active task 1ms
+ ✓ |engine-default| src/__tests__/worktree-pool.test.ts > cleanupOrphanedWorktrees > preserves worktrees assigned to in-progress/in-review tasks 1ms
+ ✓ |engine-default| src/__tests__/worktree-pool.test.ts > cleanupOrphanedWorktrees > handles git worktree remove failures gracefully (non-fatal) 0ms
+ ✓ |engine-default| src/__tests__/worktree-pool.test.ts > cleanupOrphanedWorktrees > no-ops when .worktrees/ doesn't exist 0ms
+ ✓ |engine-default| src/__tests__/worktree-pool.test.ts > cleanupOrphanedWorktrees > logs warning when readdirSync fails for cleanup scan 0ms
+ ✓ |engine-default| src/__tests__/worktree-pool.test.ts > cleanupOrphanedWorktrees > returns 0 when all worktrees are assigned to active tasks 0ms
+ ✓ |engine-default| src/__tests__/worktree-pool.test.ts > cleanupOrphanedWorktrees > excludes internal containers and preserves unregistered orphans 0ms
+ ✓ |engine-default| src/__tests__/worktree-pool.test.ts > cleanupOrphanedWorktrees > preserves unregistered directories referenced by stale active task metadata 0ms
+ ✓ |engine-default| src/__tests__/worktree-pool.test.ts > reapOrphanWorktrees > excludes containers and unproven half-initialized directories 1ms
+ ✓ |engine-default| src/__tests__/worktree-pool.test.ts > reapOrphanWorktrees > preserves a dir with a dangling .git pointer 0ms
+ ✓ |engine-default| src/__tests__/worktree-pool.test.ts > reapOrphanWorktrees > skips a dir with a valid .git pointer (admin gitdir exists) 0ms
+ ✓ |engine-default| src/__tests__/worktree-pool.test.ts > reapOrphanWorktrees > does NOT reap a dir whose .git is unparseable (conservative — only confirmed-dangling pointers) 0ms
+
+ Test Files  3 passed (3)
+      Tests  46 passed (46)
+   Start at  01:50:28
+   Duration  5.41s (transform 9.87s, setup 433ms, import 15.19s, tests 31ms, environment 0ms)
+

@@ -1,0 +1,19 @@
+{
+  "mode": "--apply",
+  "sourceRevision": "a83b0e29218c55f35d87fe4b7b745d037b09f51e",
+  "taskId": "KB-002",
+  "targetOverride": {
+    "hard": 50000
+  },
+  "startedAt": "2026-09-14T05:46:41.294Z",
+  "mutated": true,
+  "activeNativeSessions": [],
+  "currentOverride": null,
+  "activeCanaryPids": [],
+  "afterOverride": {
+    "hard": 50000
+  },
+  "projectGlobalUnchanged": true,
+  "cleanedUp": true,
+  "finishedAt": "2026-09-14T05:46:41.757Z"
+}

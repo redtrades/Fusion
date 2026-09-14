@@ -1,0 +1,53 @@
+
+ RUN  v4.1.10 /Users/man/worktrees/Fusion/300-live-integration/packages/dashboard
+
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-lifecycle.test.ts > POST /tasks/:id/reset > preserves the TaskStore receiver while publishing the confirmed reset 101ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-lifecycle.test.ts > POST /tasks/:id/reset > forwards a trimmed description override only through the atomic publisher 23ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-lifecycle.test.ts > POST /tasks/:id/reset > rejects invalid description 42 before destructive reset work 21ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-lifecycle.test.ts > POST /tasks/:id/reset > rejects invalid description '  \n\t ' before destructive reset work 17ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-lifecycle.test.ts > POST /tasks/:id/reset > resets a planning-owned worktree after the planner reset fence releases it 16ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-lifecycle.test.ts > POST /tasks/:id/reset > reconciles an aged orphaned planning registration when no disposer owns it 16ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-workspace-lifecycle.test.ts > POST /api/tasks/:id/reset workspace lifecycle > starts both cancellation domains before workspace cleanup and publishes a clean reset 101ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-workspace-lifecycle.test.ts > POST /api/tasks/:id/reset workspace lifecycle > refuses a live coordinator session at admission without deleting workspace state 42ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-workspace-lifecycle.test.ts > POST /api/tasks/:id/reset workspace lifecycle > reports a foreign coordinator holder at admission without deleting workspace state 31ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-workspace-lifecycle.test.ts > POST /api/tasks/:id/reset workspace lifecycle > probes the raw coordinator registry key when the workspace root is a symlink 24ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-lifecycle.test.ts > POST /tasks/:id/reset > reports a live planner as an actionable conflict without deleting its plan 14ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-lifecycle.test.ts > POST /tasks/:id/reset > reports a foreign session holder as an actionable conflict 11ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-lifecycle.test.ts > POST /tasks/:id/reset > keeps durable state non-replannable when prompt removal fails after worktree cleanup 19ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-lifecycle.test.ts > POST /tasks/:id/reset > fails closed when the bootstrap seed cannot be written 13ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-lifecycle.test.ts > POST /tasks/:id/reset > admission blocks a foreign-held task branch without destroying anything 13ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-lifecycle.test.ts > POST /tasks/:id/reset > post-delete verification failure blocks publication 12ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-lifecycle.test.ts > POST /tasks/:id/reset > a post-removal branch block is recoverable on retry with a recorded worktree 24ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-workspace-lifecycle.test.ts > POST /api/tasks/:id/reset workspace lifecycle > reconciles an aged dead coordinator entry and completes reset 24ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-workspace-lifecycle.test.ts > POST /api/tasks/:id/reset workspace lifecycle > refuses a live coordinator holder registered during repository removal and retains the plan 23ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-workspace-lifecycle.test.ts > POST /api/tasks/:id/reset workspace lifecycle > recovers absent recorded targets after a foreign coordinator holder clears 37ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-workspace-lifecycle.test.ts > POST /api/tasks/:id/reset workspace lifecycle > refuses rather than settles a recent coordinator registration created during removal 21ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-lifecycle.test.ts > POST /tasks/:id/reset > publishes Reset into the Planning hold lane for a manual-intake workflow 13ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-lifecycle.test.ts > POST /tasks/:id/reset > keeps an auto-triage workflow on its intake lane 10ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-lifecycle.test.ts > POST /tasks/:id/reset > falls back to triage when the workflow IR cannot resolve a column 13ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-lifecycle.test.ts > POST /tasks/:id/reset > rejects a registered foreign checkout before cancellation or deletion 10ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-lifecycle.test.ts > Reset alias ownership admission > preserves branch ownership through a symlinked project root 14ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-lifecycle.test.ts > Reset alias ownership admission > preserves canonical-id ownership through a symlinked project root 13ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-lifecycle.test.ts > Reset alias ownership admission > preserves unregistered ownership through a symlinked project root 9ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-lifecycle.test.ts > Reset alias ownership admission > preserves foreign-owner ownership through a symlinked project root 10ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-lifecycle.test.ts > Reset alias ownership admission > preserves live-alias ownership through a symlinked project root 12ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-lifecycle.test.ts > Reset alias ownership admission > preserves escape ownership through a symlinked project root 9ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-workspace-lifecycle.test.ts > POST /api/tasks/:id/reset workspace lifecycle > removes an empty new-layout task directory but retains a non-empty one 43ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-workspace-lifecycle.test.ts > POST /api/tasks/:id/reset workspace lifecycle > blocks one repository without losing either repository cleanup target on retry 328ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-workspace-lifecycle.test.ts > POST /api/tasks/:id/reset workspace lifecycle > removes legacy worktrees without evaluating the new-layout coordinator 64ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-workspace-lifecycle.test.ts > POST /api/tasks/:id/reset workspace lifecycle > does not treat a foreign workspace-repo-acquire claim on a repository root as a reset target holder 19ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-workspace-lifecycle.test.ts > POST /api/tasks/:id/reset workspace lifecycle > logs an unmatched singular workspace pointer and still publishes 21ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-workspace-lifecycle.test.ts > POST /api/tasks/:id/reset workspace lifecycle > refuses a live first repository before touching the second repository or prompt 17ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-workspace-lifecycle.test.ts > POST /api/tasks/:id/reset workspace lifecycle > reports a foreign session holder with its repository 18ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-workspace-lifecycle.test.ts > POST /api/tasks/:id/reset workspace lifecycle > refuses an unregistered repository before cancellation 9ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-workspace-lifecycle.test.ts > POST /api/tasks/:id/reset workspace lifecycle > refuses external and repository-root workspace targets before cleanup 17ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-workspace-lifecycle.test.ts > POST /api/tasks/:id/reset workspace lifecycle > refuses a target claimed by another task's workspace entry 12ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-workspace-lifecycle.test.ts > POST /api/tasks/:id/reset workspace lifecycle > refuses publication when the reset disposer changes workspace targets 17ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-workspace-lifecycle.test.ts > POST /api/tasks/:id/reset workspace lifecycle > refuses incomplete removal and reconciles an already-absent repository 37ms
+ ✓ |dashboard-api-quality-backfill| src/__tests__/task-reset-workspace-lifecycle.test.ts > POST /api/tasks/:id/reset workspace lifecycle > retains singular reset behavior without evaluating a coordinator session root 38ms
+
+ Test Files  2 passed (2)
+      Tests  44 passed (44)
+   Start at  01:50:28
+   Duration  12.84s (transform 15.24s, setup 710ms, import 22.72s, tests 1.36s, environment 0ms)
+

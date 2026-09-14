@@ -1,0 +1,1 @@
+Awaiting source files under `source/` to confirm they match the patch before final verdict. The diff already contains the exact paths I need, so I will read the four real files next rather than re-derive from the patch alone.

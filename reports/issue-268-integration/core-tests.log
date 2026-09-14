@@ -1,0 +1,30 @@
+
+ RUN  v4.1.10 /Users/man/worktrees/Fusion/300-live-integration/packages/core
+
+ ✓ src/__tests__/worktree-path-reservation.test.ts > worktree path reservation > excludes concurrent owners until the current owner releases 42ms
+ ✓ src/__tests__/worktree-path-reservation.test.ts > worktree path reservation > reconciles a quarantined path before handing it to a successor 18ms
+ ✓ src/__tests__/worktree-path-reservation.test.ts > worktree path reservation > keeps a quarantined path unavailable when successor reconciliation fails 72ms
+ ✓ src/__tests__/worktree-path-reservation.test.ts > worktree path reservation > times out rather than waiting forever for a live claim 55ms
+ ✓ src/__tests__/task-reset-targets.test.ts > buildTaskResetWorktreePlan > plans a singular task worktree using the project worktrees root 2ms
+ ✓ src/__tests__/task-reset-targets.test.ts > buildTaskResetWorktreePlan > plans the canonical singular target without a recorded worktree 0ms
+ ✓ src/__tests__/task-reset-targets.test.ts > buildTaskResetWorktreePlan > deduplicates a recorded canonical singular worktree 1ms
+ ✓ src/__tests__/task-reset-targets.test.ts > buildTaskResetWorktreePlan > retains a legacy recorded singular worktree beside the canonical target 1ms
+ ✓ src/__tests__/task-reset-targets.test.ts > buildTaskResetWorktreePlan > uses the configured worktrees directory for the canonical singular target 0ms
+ ✓ src/__tests__/task-reset-targets.test.ts > buildTaskResetWorktreePlan > has no canonical singular target for a workspace task without recorded repositories 0ms
+ ✓ src/__tests__/task-reset-targets.test.ts > buildTaskResetWorktreePlan > plans every new-layout repository under one workspace task directory 8ms
+ ✓ src/__tests__/task-reset-targets.test.ts > buildTaskResetWorktreePlan > uses each repository worktrees directory as containment for legacy entries 1ms
+ ✓ src/__tests__/task-reset-targets.test.ts > buildTaskResetWorktreePlan > uses acquisition's configured per-repository reservation root 1ms
+ ✓ src/__tests__/task-reset-targets.test.ts > buildTaskResetWorktreePlan > deduplicates canonical workspace paths and records aliases 1ms
+ ✓ src/__tests__/task-reset-targets.test.ts > buildTaskResetWorktreePlan > folds a workspace singular pointer into an equal target 0ms
+ ✓ src/__tests__/task-reset-targets.test.ts > buildTaskResetWorktreePlan > reports an unmatched workspace singular pointer without making it removable 0ms
+ ✓ src/__tests__/task-reset-targets.test.ts > buildTaskResetWorktreePlan > preserves nested repository children under the workspace task directory 0ms
+ ✓ src/__tests__/task-reset-targets.test.ts > buildTaskResetWorktreePlan > rejects a repository path that escapes the workspace root 0ms
+ ✓ src/__tests__/task-reset-targets.test.ts > Reset physical path identity > deduplicates aliases with an existing leaf: false 20ms
+ ✓ src/__tests__/task-reset-targets.test.ts > Reset physical path identity > deduplicates aliases with an existing leaf: true 21ms
+ ✓ src/__tests__/task-reset-targets.test.ts > Reset physical path identity > folds workspace and singular aliases into one physical child 3ms
+
+ Test Files  2 passed (2)
+      Tests  21 passed (21)
+   Start at  01:50:28
+   Duration  1.09s (transform 724ms, setup 371ms, import 716ms, tests 251ms, environment 0ms)
+

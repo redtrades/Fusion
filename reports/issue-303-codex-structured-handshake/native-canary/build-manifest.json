@@ -1,0 +1,15 @@
+{
+  "packages/core/dist/postgres/startup-factory.js": "2eedae7e30f59ae5699c7eaad2b94f00abc26bdc426e15b89da908dce92eb64f",
+  "packages/core/dist/cli/cli-session-store.js": "616df1b94216f16db9acb8c9bb04ad1002a23a7b67a6205ec61a908f194b9dc5",
+  "packages/core/dist/cli/cli-token-usage-types.js": "88c2fe2fe10dc158ea57ff9246f2ad7a3ee7f9b3dab824fc47b04f987ae423d6",
+  "packages/core/dist/task-store/cli-token-usage-ops.js": "d7221ae81486c703f7dadade02bd2b40a7c38e4fc6e51469d04cfffcdd8f8198",
+  "packages/engine/dist/cli-agent/session-manager.js": "54ac28875024bda33f77cf1a246741ac43ada40826ab3ab83576748dfdee0842",
+  "packages/engine/dist/cli-agent/task-session.js": "d4d2b6f1b5536f80f3ea6ff92c2a820afbbb2e250b15bf7e2c50df03798a43ab",
+  "packages/engine/dist/cli-agent/token-usage-observer.js": "3aa9dbe38a6f579acd0cde6b8acc1a173c7d6efdf425faec8245c763fcb5d4aa",
+  "packages/engine/dist/cli-agent/token-budget-capability.js": "fa1bc9e47eec664299c8b547df69655ed8d900d0a93dcd0002b2794bca27ab5c",
+  "packages/engine/dist/cli-agent/codex-app-server-session.js": "9d2239e36a90b3e106a304ccebf103c54f2aa023930c528c1ff5dfc15932700c",
+  "packages/engine/dist/cli-agent/adapter.js": "c531ca461ffe0e578dff38476d07f9833a76785786ce561e8990de31f66a3625",
+  "packages/engine/dist/cli-agent/adapters/codex.js": "0768de384cbf62ae265f62e7803431b0b9e3aaf43224bc599f025672c6645010",
+  "packages/engine/dist/cli-agent/telemetry-hub.js": "d753595598a80b65839ed7738dd53fe2b0ca9852018d4a4983f01564ee88a7ee",
+  "packages/engine/dist/concurrency/token-budget-enforcer.js": "5651fe9346a8d6213928ff5cac4d0c8eada8efff4b52e07145a815b34d15446c"
+}

@@ -1,0 +1,57 @@
+I read all supplied source. My independent PASS/FIX verdict on followup.patch follows.
+
+---
+
+## Verdict: PASS
+
+No concrete defect found in the supplied patch. The follow-up correctly binds the exact pending owner immediately before dispatch and rejects every invalid reaffirmation shape.
+
+### Causal path as implemented
+
+**Ed4 gap** (the bug this fixes):
+1. Absent future file `read()` returns on ENOENT before `nativeHeaderVerified` is true.
+2. No durable ACK is written for the pending checkpoint.
+3. A concurrent store fixture changes ownership or exhausts budget right after the valid fresh admission commit.
+4. The engine proceeds to `turn/start` because nothing observed the concurrent change.
+
+**Follow-up closure:**
+1. `token-usage-observer.ts:beforeFirstTurn` – after the read attempt, if `!this.nativeHeaderVerified`, it flushes sessions and calls `recordCliTokenUsageFenced` with `reaffirm: true`, `baseline: false`, `observations: []`, `cursor.phase: "awaiting-file"`, `bytes: 0`, the original `transcriptPath`, and no `fileIdentity`.
+2. `cli-token-usage-ops.ts` – the `request.reaffirm` branch throws unless all of: not `fresh`, adapter is `codex`, `previousOwner` exists, `previousCursor.phase === "awaiting-file"`, no baseline, no observations, `cursor.phase === "awaiting-file"`, `bytes === 0`, no `fileIdentity`, and `cursor.transcriptPath === previousCursor.transcriptPath`.
+3. The transaction still acquires the task advisory lock, locks the task row, checks current lease/native-session ownership, calculates current totals, and can return `hardExceeded: true` reflecting concurrent budget exhaustion.
+4. Both engine tests with reason `ownership` and `budget` assert the session result is `kind: "killed"` and no `turn-receipt.json` is written.
+
+### What is verified by the supplied tests
+
+**Core PG test** (`cli-token-usage-fenced.pg.test.ts`):
+- Reaffirm returns `observedWorkTokens: 0`.
+- Reaffirm with wrong `transcriptPath` throws.
+- Reaffirm after repeated raw fresh throws `"fresh"`.
+- Reaffirm after a concurrent native session exhausts budget returns `hardExceeded: true`.
+- Reaffirm after `resetTaskPublication` throws `"ownership"`.
+
+**Engine synthetic-native test** (`cli-codex-structured-pipeline.test.ts`):
+- `fixture` sets `invalidated = true` only after the valid `fresh` admission returns.
+- On `invalidateAfterAdmission === "ownership"`, the mock store throws `"CLI token ownership mismatch"` on the next call.
+- On `invalidateAfterAdmission === "budget"`, the mock ack contains `hardExceeded: true` on the next call.
+- The test awaits `f.session.result()` and asserts `kind: "killed"` plus absent receipt.
+
+### Boundaries and limits
+
+- This is a bounded reaffirm of the exact pending checkpoint only. It does not snapshot dynamic policy-limit changes. It checks current durable task usage and ownership only.
+- The header-verified path (`nativeHeaderVerified === true`) takes the normal accounting path and does not reaffirm.
+- If the future file is absent forever and `beforeFirstTurn` reaffirm throws (e.g. ownership changed or budget exhausted), the session fails. That matches the intended closed behavior.
+
+### No defect in the patch itself
+
+- `reaffirm` validation at `token-usage-observer.ts:106-114` matches the operator constraints at `cli-token-usage-ops.ts:70-71`.
+- `cursor.fileIdentity === undefined`, `bytes === 0`, `phase === "awaiting-file"` is exactly what the reader would reaffirm when it never opened the file.
+- The patch does not relax the existing ownership / budget / identity checks.
+- The new test cases exercise the actual missing operation (`reaffirm`) and the two failure modes (ownership change, budget exhaustion) before dispatch.
+
+### One narrow note, not a defect
+
+The patch moves `this.beforeFirstRequest = true` earlier in `beforeFirstTurn` than in the original body, but that line already existed inside the try block before the patch site and still clears in `finally`. It does not change semantics here.
+
+---
+
+**Result: PASS on the supplied revision and tests.**

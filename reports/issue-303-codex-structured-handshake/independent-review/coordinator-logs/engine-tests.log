@@ -1,0 +1,10 @@
+
+ RUN  v4.1.10 /Users/man/worktrees/Fusion/300-live-integration/packages/engine
+
+······························
+
+ Test Files  5 passed (5)
+      Tests  30 passed (30)
+   Start at  01:38:20
+   Duration  5.21s (transform 9.14s, setup 475ms, import 13.68s, tests 3.78s, environment 0ms)
+

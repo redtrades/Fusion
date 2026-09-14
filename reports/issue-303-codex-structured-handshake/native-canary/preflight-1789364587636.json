@@ -1,0 +1,38 @@
+{
+  "sourceRevision": "a83b0e29218c55f35d87fe4b7b745d037b09f51e",
+  "mode": "preflight",
+  "startedAt": "2026-09-14T05:43:07.635Z",
+  "promptAttempts": 0,
+  "promptSent": false,
+  "accountingAccepted": false,
+  "checkpoints": [],
+  "metadataOnly": true,
+  "projectId": "proj_4a361e4089e74d61",
+  "taskId": "KB-002",
+  "lease": {
+    "runId": "issue303-native-admission",
+    "leaseEpoch": 1,
+    "agentId": "agent-7ad42ea9",
+    "nodeId": "agents303-native-pilot"
+  },
+  "worktree": "/tmp/agents303-pilot-state-tmnayD/task-worktrees/kb-002",
+  "head": "6a4e977d764365c4da5597ffacaceea000cd1fec",
+  "requestedModel": "gpt-6-astra",
+  "requestedProvider": "openai",
+  "preflight": {
+    "resolvedBudget": {
+      "source": "none"
+    },
+    "finitePositiveHard": false,
+    "observedWorkTokens": 0,
+    "taskPaused": false,
+    "column": "inbox",
+    "taskBudgetOverride": null,
+    "projectBudget": null,
+    "globalBudget": null,
+    "taskAutoMerge": false
+  },
+  "preflightComplete": true,
+  "cleanedUp": true,
+  "finishedAt": "2026-09-14T05:43:08.160Z"
+}

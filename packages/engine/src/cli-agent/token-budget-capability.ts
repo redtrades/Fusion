@@ -10,7 +10,7 @@ export async function inspectCliTokenBudget(store: TaskStore, sessions: CliSessi
   if (!a || task.checkoutRunId !== a.runId || task.checkoutLeaseEpoch !== a.leaseEpoch || task.checkedOutBy !== a.agentId || task.checkoutNodeId !== a.nodeId) throw new Error("Native CLI accounting admission mismatch");
   const { hard } = resolveTaskTokenBudget(task, settings.project as ProjectSettings, settings.global as GlobalSettings);
   if (!Number.isSafeInteger(hard) || hard! <= 0) throw new Error("Native CLI accounting requires a finite positive hard budget");
-  const result: CliTokenBudgetInspection = { protocol: "native-cli-observed-v1", hardLimit: hard!, observedWorkTokens: getTokenBudgetUsage(task.tokenUsage), launchGate: "authenticated-identity-before-prompt" };
+  const result: CliTokenBudgetInspection = { protocol: "native-cli-observed-v1", hardLimit: hard!, observedWorkTokens: getTokenBudgetUsage(task.tokenUsage), launchGate: input.adapterId === "codex" ? "native-structured-identity-before-prompt" : "authenticated-identity-before-prompt" };
   if (input.sessionId) {
     await sessions.flush();
     const session = sessions.getSession(input.sessionId);

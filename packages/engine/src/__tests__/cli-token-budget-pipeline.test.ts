@@ -12,6 +12,14 @@ import { claudeCodeAdapter } from "../cli-agent/adapters/claude-code.js";
 import { TelemetryHub } from "../cli-agent/telemetry-hub.js";
 import { launchCliTaskSession } from "../cli-agent/task-session.js";
 
+// No production executable fallback when a former PTY fixture enters RPC.
+vi.mock("node:child_process", async importOriginal => {
+  const actual = await importOriginal<typeof import("node:child_process")>();
+  return { ...actual, spawn: (...args: Parameters<typeof actual.spawn>) => {
+    if (/(^|\/)codex$/.test(String(args[0]))) throw new Error("Test requires an explicit synthetic Codex executable");
+    return actual.spawn(...args);
+  } };
+});
 const cleanup: Array<() => Promise<unknown> | void> = [];
 afterEach(async () => { for (const release of cleanup.splice(0).reverse()) await release(); });
 async function fixture(hard = 10, sendIdentity = true, codexAlias = false) {
@@ -67,13 +75,8 @@ describe("native CLI observed budget pipeline", () => {
     expect(f.state()).toMatchObject({ total: 11, paused: true });
     expect(f.child.kill).toHaveBeenCalled();
   });
-  it("accepts a trusted transcript alias and canonical Codex cwd for the same worktree", async () => {
-    const f = await fixture(100, true, true);
-    await vi.waitFor(() => expect(f.child.write).toHaveBeenCalled());
-    await f.emitUsage(5);
-    f.hub.ingest(f.session.sessionId, { kind: "done" });
-    expect(await f.session.result()).toMatchObject({ kind: "success" });
-    expect(f.state()).toMatchObject({ total: 5, phase: "drained" });
+  it("fails fast if a legacy PTY fixture omits a structured synthetic executable", async () => {
+    await expect(fixture(100, true, true)).rejects.toThrow("explicit synthetic Codex executable");
   });
   it("never injects when the trusted native hook is absent", async () => {
     const f = await fixture(10, false);

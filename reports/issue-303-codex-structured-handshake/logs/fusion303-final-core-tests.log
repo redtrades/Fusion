@@ -1,0 +1,9 @@
+
+ RUN  v4.1.10 /Users/man/worktrees/Fusion/303-codex-structured-handshake/packages/core
+
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  01:17:42
+   Duration  231ms (transform 58ms, setup 91ms, import 16ms, tests 3ms, environment 0ms)
+

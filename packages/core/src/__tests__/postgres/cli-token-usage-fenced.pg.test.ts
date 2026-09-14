@@ -52,4 +52,20 @@ pgDescribe("native CLI durable token accounting", () => {
     await h.store().resetTaskPublication(f.task.id, "todo");
     await expect(h.store().recordCliTokenUsageFenced(f.task.id, f.request(5))).rejects.toThrow("ownership");
   });
+  it("fences fresh pending admission, binds the first inode once, and charges first cumulative usage", async () => {
+    const f = await fixture();
+    const pending: CliTokenUsageWrite = { ...f.request(0), fresh: true, observations: [], cursor: { bytes: 0, phase: "awaiting-file", transcriptPath: "/native/future.jsonl" } };
+    const admitted = await h.store().recordCliTokenUsageFenced(f.task.id, pending);
+    expect(admitted.observedWorkTokens).toBe(0);
+    expect(admitted.task.sourceMetadata?.cliTokenUsage).toMatchObject({ cursors: { "codex:conversation": { phase: "awaiting-file", transcriptPath: "/native/future.jsonl" } } });
+    await expect(h.store().recordCliTokenUsageFenced(f.task.id, pending)).rejects.toThrow("fresh");
+    const bound: CliTokenUsageWrite = { ...f.request(9), cursor: { ...f.request(9).cursor, transcriptPath: "/native/future.jsonl" } };
+    expect((await h.store().recordCliTokenUsageFenced(f.task.id, bound)).observedWorkTokens).toBe(9);
+    expect((await h.store().recordCliTokenUsageFenced(f.task.id, bound)).observedWorkTokens).toBe(9);
+    await expect(h.store().recordCliTokenUsageFenced(f.task.id, { ...bound, cursor: { ...bound.cursor, fileIdentity: "other" } })).rejects.toThrow("identity");
+    await expect(h.store().recordCliTokenUsageFenced(f.task.id, { ...bound, cursor: { ...bound.cursor, transcriptPath: "/other/path" } })).rejects.toThrow("identity");
+    await h.store().resetTaskPublication(f.task.id, "todo");
+    await expect(h.store().recordCliTokenUsageFenced(f.task.id, pending)).rejects.toThrow("ownership");
+  });
+
 });

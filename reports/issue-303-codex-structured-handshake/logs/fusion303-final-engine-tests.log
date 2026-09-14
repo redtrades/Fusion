@@ -1,0 +1,9 @@
+
+ RUN  v4.1.10 /Users/man/worktrees/Fusion/303-codex-structured-handshake/packages/engine
+
+
+ Test Files  6 passed (6)
+      Tests  29 passed (29)
+   Start at  01:17:35
+   Duration  6.22s (transform 12.46s, setup 769ms, import 20.05s, tests 3.58s, environment 0ms)
+

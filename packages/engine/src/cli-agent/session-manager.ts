@@ -1,3 +1,4 @@
+import { CodexAppServerSession, type CodexNativeIdentity } from "./codex-app-server-session.js";
 /**
  * CliSessionManager — engine-owned PTY lifecycle for CLI agent sessions
  * (CLI Agent Executor, U2).
@@ -282,6 +283,8 @@ type WriteJob =
 // ── Session spawn options ───────────────────────────────────────────────────
 
 export interface SpawnCliSessionOptions {
+  /** Native protected Codex admission; not a terminal or plugin RPC endpoint. */
+  codexStructured?: { admit: (identity: CodexNativeIdentity) => Promise<void> };
   /** Native-only preparation after durable record creation and before child startup. */
   beforePtyStart?: (record: CliSession) => Promise<{ hookContextPath?: string } | void>;
   /** Adapter id to drive the session (resolved against the registry). */
@@ -386,6 +389,7 @@ export class CliSessionManager {
 
   /** Process registry: session id → live session. Self-cleaning on exit. */
   private readonly sessions = new Map<string, LiveSession>();
+  private readonly structured = new Map<string, { transport: CodexAppServerSession; scrollback: ScrollbackRing; streams: Set<LiveByteStream>; reason?: CliTerminationReason }>();
 
   /** Bound exit handler so it can be removed on dispose. */
   private readonly onProcessExit = () => this.killAll();
@@ -404,7 +408,7 @@ export class CliSessionManager {
 
   /** Number of currently live PTY sessions (slots consumed). */
   activeCount(): number {
-    return this.sessions.size;
+    return this.sessions.size + this.structured.size;
   }
 
   /** Configured ceiling on concurrently live PTY sessions. */
@@ -414,12 +418,12 @@ export class CliSessionManager {
 
   /** Free concurrency slots remaining before the ceiling (never negative). */
   availableSlots(): number {
-    return Math.max(0, this.concurrencyCeiling - this.sessions.size);
+    return Math.max(0, this.concurrencyCeiling - this.activeCount());
   }
 
   /** Whether a session id is currently live. */
   isLive(sessionId: string): boolean {
-    return this.sessions.has(sessionId);
+    return this.sessions.has(sessionId) || this.structured.has(sessionId);
   }
 
   // ── Spawn ──────────────────────────────────────────────────────────────
@@ -431,7 +435,8 @@ export class CliSessionManager {
    * waitForReady).
    */
   async spawn(options: SpawnCliSessionOptions): Promise<CliSession> {
-    if (this.sessions.size >= this.concurrencyCeiling) {
+    if (options.codexStructured) return this.spawnStructured(options);
+    if (this.activeCount() >= this.concurrencyCeiling) {
       throw new CliConcurrencyLimitError(this.concurrencyCeiling, this.sessions.size);
     }
 
@@ -454,6 +459,7 @@ export class CliSessionManager {
       launch = adapter.buildResume({ ...launchCtx, nativeSessionId: options.resume.nativeSessionId });
       const existing = this.store.getSession(options.resume.sessionId);
       if (!existing) throw new UnknownCliSessionError(options.resume.sessionId);
+      if (existing.adapterId === "codex" && existing.autonomyPosture?.cliTokenBudgetProtocol) throw new Error("Protected Codex structured resume unsupported");
       if (existing.autonomyPosture?.cliTokenBudgetProtocol && !options.beforePtyStart) throw new Error("Protected CLI resume requires fresh native usage admission");
       // Move the reused record back to "starting" for the relaunch.
       record = this.store.updateSession(options.resume.sessionId, {
@@ -565,6 +571,47 @@ export class CliSessionManager {
     return record;
   }
 
+  private async spawnStructured(options: SpawnCliSessionOptions): Promise<CliSession> {
+    if (options.adapterId !== "codex" || options.resume || !options.codexStructured || !options.worktreePath) throw new Error("Unsupported Codex structured launch");
+    if (this.activeCount() >= this.concurrencyCeiling) throw new CliConcurrencyLimitError(this.concurrencyCeiling, this.activeCount());
+    const adapter = this.registry.get("codex");
+    const context = { settings: options.settings ?? {}, posture: options.posture ?? {} };
+    const launch = adapter.buildLaunch(context);
+    // Preserve supported native config overrides verbatim. TUI-only arguments
+    // or elevated launch flags must not be silently dropped or translated.
+    for (let i = 0; i < launch.args.length; i += 2) {
+      if (launch.args[i] !== "-c" || typeof launch.args[i + 1] !== "string") throw new Error("Unsupported Codex structured launch setting");
+    }
+    const record = this.store.createSession({ adapterId: "codex", projectId: options.projectId, purpose: options.purpose, taskId: options.taskId ?? null, chatSessionId: options.chatSessionId ?? null, worktreePath: options.worktreePath, autonomyPosture: options.posture ?? {}, agentState: "starting" });
+    await this.store.flush();
+    try {
+      await options.beforePtyStart?.(record);
+      const scrollback = new ScrollbackRing(this.scrollbackBytes), streams = new Set<LiveByteStream>();
+      const transport = new CodexAppServerSession({ command: launch.command, args: [...launch.args, "app-server", "--stdio"], cwd: options.worktreePath, env: this.buildEnv(adapter.buildEnvAllowlist(context)),
+        model: typeof options.settings?.model === "string" ? options.settings.model : undefined,
+        modelProvider: typeof options.settings?.modelProvider === "string" ? options.settings.modelProvider : undefined,
+        onIdentity: async identity => {
+          const old = this.store.getSession(record.id);
+          if (!old || (old.nativeSessionId && old.nativeSessionId !== identity.nativeSessionId)) throw new Error("Native Codex session identity changed");
+          this.store.updateSession(record.id, { nativeSessionId: identity.nativeSessionId }); await this.store.flush();
+          await options.codexStructured!.admit(identity);
+          this.store.updateSession(record.id, { agentState: "ready" }); await this.store.flush();
+        },
+        onOutput: text => { const bytes = textEncoder.encode(text); scrollback.append(bytes); for (const stream of streams) stream.push(bytes); },
+        onExit: () => {
+          const live = this.structured.get(record.id); this.structured.delete(record.id);
+          for (const stream of streams) stream.close();
+          try { this.store.updateSession(record.id, { agentState: "dead", terminationReason: live?.reason ?? "crashed" }); } catch { /* shutdown */ }
+        },
+      });
+      this.structured.set(record.id, { transport, scrollback, streams });
+      return record;
+    } catch (error) {
+      this.store.updateSession(record.id, { agentState: "dead", terminationReason: "crashed" });
+      await this.store.flush().catch(() => {}); throw error;
+    }
+  }
+
   /**
    * Build the child env from an explicit allowlist — NEVER inherit the whole
    * `process.env`. This is the control that keeps FUSION_* service credentials
@@ -664,6 +711,8 @@ export class CliSessionManager {
 
   /** Resolve once the session has been observed ready. */
   waitForReady(sessionId: string): Promise<void> {
+    const structured = this.structured.get(sessionId);
+    if (structured) return structured.transport.ready();
     const live = this.require(sessionId);
     if (live.ready) return Promise.resolve();
     return new Promise((resolve) => live.readyWaiters.push(resolve));
@@ -677,6 +726,8 @@ export class CliSessionManager {
    * not already exited within this manager's memory.
    */
   waitForExit(sessionId: string): Promise<{ exitCode: number; signal: number | undefined }> {
+    const structured = this.structured.get(sessionId);
+    if (structured) return structured.transport.exited;
     const live = this.require(sessionId);
     if (live.exitResult) return Promise.resolve(live.exitResult);
     return new Promise((resolve) => live.exitWaiters.push(resolve));
@@ -694,7 +745,11 @@ export class CliSessionManager {
    * Injection is deferred until the session is ready, and (if a quiet window is
    * configured) until output has been quiet.
    */
+  isStructured(sessionId: string): boolean { return this.structured.has(sessionId); }
+
   async inject(sessionId: string, text: string): Promise<void> {
+    const structured = this.structured.get(sessionId);
+    if (structured) return structured.transport.turn(text);
     const live = this.require(sessionId);
     if (!live.ready) {
       await this.waitForReady(sessionId);
@@ -711,6 +766,7 @@ export class CliSessionManager {
    * queued mid-injection cannot interleave bytes.
    */
   write(sessionId: string, data: string): void {
+    if (this.structured.has(sessionId)) throw new Error("Codex structured attachment is read-only");
     const live = this.require(sessionId);
     live.queue.push({ kind: "user", data });
     void this.drain(live);
@@ -782,6 +838,13 @@ export class CliSessionManager {
    * synchronously in the same tick, so replay-then-live has no duplicate bytes.
    */
   attach(sessionId: string): CliSessionAttachment {
+    const structured = this.structured.get(sessionId);
+    if (structured) {
+      const stream = new LiveByteStream(); structured.streams.add(stream);
+      return { scrollback: structured.scrollback.snapshot(), stream,
+        write: () => { throw new Error("Codex structured attachment is read-only"); }, resize: () => {},
+        detach: () => { structured.streams.delete(stream); stream.close(); } };
+    }
     const live = this.require(sessionId);
     const scrollback = live.scrollback.snapshot();
     const stream = new LiveByteStream();
@@ -810,6 +873,7 @@ export class CliSessionManager {
 
   /** Resize the PTY. Latest call wins (latest-active-client policy). */
   resize(sessionId: string, cols: number, rows: number): void {
+    if (this.structured.has(sessionId)) return;
     const live = this.require(sessionId);
     if (live.terminated) return;
     if (cols <= 0 || rows <= 0) return;
@@ -824,6 +888,7 @@ export class CliSessionManager {
 
   /** Pause the underlying PTY (high-watermark backpressure). */
   requestPause(sessionId: string): void {
+    if (this.structured.has(sessionId)) return;
     const live = this.require(sessionId);
     if (live.terminated || live.paused) return;
     live.paused = true;
@@ -836,6 +901,7 @@ export class CliSessionManager {
 
   /** Resume the underlying PTY (low-watermark backpressure release). */
   requestResume(sessionId: string): void {
+    if (this.structured.has(sessionId)) return;
     const live = this.require(sessionId);
     if (live.terminated || !live.paused) return;
     live.paused = false;
@@ -855,6 +921,8 @@ export class CliSessionManager {
    * session's own registered pid.
    */
   kill(sessionId: string, reason: CliTerminationReason = "killed"): void {
+    const structured = this.structured.get(sessionId);
+    if (structured) { structured.reason = reason; structured.transport.kill(); return; }
     const live = this.sessions.get(sessionId);
     if (!live) return;
     this.killLive(live, reason);
@@ -900,6 +968,7 @@ export class CliSessionManager {
    * dashboard / port 4040 / any unrelated process. Invoked on `process.exit`.
    */
   killAll(): void {
+    for (const id of this.structured.keys()) this.kill(id, "engineDeath");
     for (const live of [...this.sessions.values()]) {
       this.killLive(live, "engineDeath");
     }

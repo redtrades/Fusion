@@ -352,6 +352,7 @@ export async function invokeHermesCli(
   settings: HermesCliSettings,
   resumeSessionId?: string,
   signal?: AbortSignal,
+  launchOptions?: { cwd?: string; beforeSpawnSession?: () => Promise<void> | void },
 ): Promise<HermesCliResult> {
   if (signal?.aborted) throw new Error("hermes: invocation aborted");
   const args = buildHermesArgs(prompt, settings, resumeSessionId);
@@ -362,17 +363,33 @@ export async function invokeHermesCli(
   const launch = await resolveHermesLaunch(settings.binaryPath, args, { env: spawnEnv });
 
   if (signal?.aborted) throw new Error("hermes: invocation aborted");
-  return new Promise<HermesCliResult>((resolve, reject) => {
+  // FNXC:HermesLifecycle 2026-09-14-08:25: Retain the host's last-chance spawn gate after asynchronous binary resolution, then recheck cancellation with no further await before spawn.
+  if (launchOptions?.beforeSpawnSession) {
+    let onAbort: (() => void) | undefined;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        onAbort = () => reject(new Error("hermes: invocation aborted"));
+        signal?.addEventListener("abort", onAbort, { once: true });
+        Promise.resolve(launchOptions.beforeSpawnSession!()).then(resolve, reject);
+      });
+    } finally { if (onAbort) signal?.removeEventListener("abort", onAbort); }
+  }
+  if (signal?.aborted) throw new Error("hermes: invocation aborted");
+  let supervised: ReturnType<typeof superviseSpawn> | undefined;
+  let escalation: ReturnType<typeof setTimeout> | undefined;
+  let removeAbort: (() => void) | undefined;
+  try { return await new Promise<HermesCliResult>((resolve, reject) => {
     let settled = false;
     /*
     FNXC:HermesCli 2026-08-15-15:46:
     The plugin owns its timeout message, so the supervisor lifetime is only a shutdown backstop.
     Setting it equal to the CLI timeout would let its close event hide the operator-visible timeout error.
     */
-    const supervised = superviseSpawn(launch.command, launch.args, {
+    supervised = superviseSpawn(launch.command, launch.args, {
       stdio: ["ignore", "pipe", "pipe"],
       env: spawnEnv,
       windowsVerbatimArguments: launch.windowsVerbatimArguments,
+      ...(launchOptions?.cwd !== undefined ? { cwd: launchOptions.cwd } : {}),
       maxLifetimeMs: settings.cliTimeoutMs + 2_100,
       killGraceMs: 2_000,
     });
@@ -382,7 +399,7 @@ export async function invokeHermesCli(
       if (settled) return;
       settled = true;
       try {
-        supervised.kill("SIGKILL");
+        supervised!.kill("SIGKILL");
       } catch {
         // already gone
       }
@@ -395,13 +412,15 @@ export async function invokeHermesCli(
       settled = true;
       clearTimeout(hardKillTimer);
       try {
-        supervised.kill("SIGTERM");
+        supervised!.kill("SIGTERM");
+        escalation = setTimeout(() => supervised!.kill("SIGKILL"), 2_000);
       } catch {
         // already gone
       }
       reject(new Error("hermes: invocation aborted"));
     };
 
+    removeAbort = () => signal?.removeEventListener("abort", onAbort);
     if (signal) {
       if (signal.aborted) {
         onAbort();
@@ -454,5 +473,9 @@ export async function invokeHermesCli(
         reject(parseErr);
       }
     });
-  });
+  }); } finally {
+    if (supervised) await supervised.waitExit();
+    if (escalation) clearTimeout(escalation);
+    removeAbort?.();
+  }
 }

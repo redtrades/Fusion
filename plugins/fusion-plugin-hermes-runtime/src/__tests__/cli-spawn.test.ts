@@ -14,7 +14,8 @@ vi.mock("@fusion/core", () => ({
   superviseSpawn: (command: string, args: string[], options: Record<string, unknown>) => {
     mockSuperviseSpawn(command, args, options);
     const child = mockSpawn(command, args, options);
-    return { child, kill: (signal: NodeJS.Signals) => child.kill(signal) };
+    const exited = new Promise<{ code: number | null; signal: string | null }>(resolve => child.once("close", (code: number | null, signal: NodeJS.Signals | null) => resolve({ code, signal })));
+    return { child, kill: (signal: NodeJS.Signals) => child.kill(signal), waitExit: () => exited };
   },
 }));
 
@@ -74,7 +75,7 @@ function makeFakeChild(): {
     child: main,
     emitStdout: (data) => stdoutEmitter.emit("data", Buffer.from(data)),
     emitStderr: (data) => stderrEmitter.emit("data", Buffer.from(data)),
-    emitError: (err) => main.emit("error", err),
+    emitError: (err) => { main.emit("error", err); main.emit("close", null); },
     emitClose: (code) => main.emit("close", code),
     kill,
   };
@@ -340,11 +341,12 @@ describe("invokeHermesCli", () => {
   it("keeps plugin timeout ownership above the supervisor backstop", async () => {
     vi.useFakeTimers();
     try {
-      const { child, kill } = makeFakeChild();
+      const { child, kill, emitClose } = makeFakeChild();
       mockSpawn.mockReturnValue(child);
       const promise = invokeHermesCli("hi", defaultSettings({ cliTimeoutMs: 10 }));
       const timedOut = expect(promise).rejects.toThrow("hermes: process timed out after 10ms");
       await vi.advanceTimersByTimeAsync(10);
+      emitClose(null);
       await timedOut;
       expect(kill).toHaveBeenCalledWith("SIGKILL");
       expect(mockSuperviseSpawn.mock.calls[0]![2].maxLifetimeMs).toBeGreaterThan(10);
@@ -469,7 +471,7 @@ describe("invokeHermesCli", () => {
   });
 
   it("AbortSignal triggers child.kill and rejects", async () => {
-    const { child, kill, emitStdout } = makeFakeChild();
+    const { child, kill, emitStdout, emitClose } = makeFakeChild();
     mockSpawn.mockReturnValue(child);
 
     const ac = new AbortController();
@@ -479,6 +481,7 @@ describe("invokeHermesCli", () => {
     // Abort before any output arrives.
     ac.abort();
     emitStdout("irrelevant");
+    emitClose(null);
 
     await expect(promise).rejects.toThrow(/aborted/);
     expect(kill).toHaveBeenCalledWith("SIGTERM");

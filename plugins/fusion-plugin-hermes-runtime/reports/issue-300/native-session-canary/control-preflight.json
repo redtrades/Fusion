@@ -1,0 +1,15 @@
+{
+  "model": {
+    "default": "upstage/solar-pro4:free",
+    "provider": "nous"
+  },
+  "fallback": [],
+  "toolsets": [],
+  "compression": false,
+  "title": false,
+  "background_review": false,
+  "memory": {
+    "memory_enabled": false,
+    "user_profile_enabled": false
+  }
+}

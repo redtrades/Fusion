@@ -1,0 +1,33 @@
+{
+  "id": "20260914_011211_0100a1",
+  "source": "tool",
+  "model": "upstage/solar-pro4:free",
+  "billing_provider": "nous",
+  "input_tokens": 613,
+  "output_tokens": 39,
+  "cache_read_tokens": 192,
+  "cache_write_tokens": 0,
+  "reasoning_tokens": 34,
+  "api_call_count": 1,
+  "tool_call_count": 0,
+  "message_count": 2,
+  "estimated_cost_usd": 0.0,
+  "actual_cost_usd": null,
+  "cost_status": "estimated",
+  "cost_source": "provider_models_api",
+  "parent_session_id": null,
+  "exportSha256": "33eb2940108bea83361732c40b53ae976c90bd9b8dcf3462b12ad170534b3c20",
+  "pluginReceipt": {
+    "schema": "hermes-session-export-v1",
+    "sessionId": "20260914_011211_0100a1",
+    "scope": "session-cumulative",
+    "reportedModel": "upstage/solar-pro4:free",
+    "reportedProvider": "nous",
+    "usage": {
+      "inputTokens": 613,
+      "outputTokens": 39,
+      "cacheReadTokens": 192,
+      "cacheWriteTokens": 0
+    }
+  }
+}

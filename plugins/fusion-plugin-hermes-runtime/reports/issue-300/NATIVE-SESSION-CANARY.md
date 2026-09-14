@@ -65,3 +65,5 @@ budget enforcement, process admission identity, installed Fusion plugin-loader
 registration, production graph dispatch, or a complete pilot. No extra model call
 was made to test those unrelated claims. Source tests were not rerun: this task
 changed only this operational report.
+
+Coordinator re-read the native receipt and preflight/cleanup evidence, verified the redacted export SHA-256, and integrated the report as f869ffe7a. Allowlisted machine-readable receipts are retained in adjacent native-session-canary/. The native export contains reasoningTokens34 separately; the plugin contract carries only its four supported counters, so reasoning is not silently added to output again. No extra inference was run for coordinator verification.

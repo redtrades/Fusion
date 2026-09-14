@@ -17,6 +17,8 @@ export interface CliTokenUsageWrite {
   cursor: CliTokenCursor;
   /** Fresh native handshake admission, never a replay or resumed baseline. */
   fresh?: boolean;
+  /** Recheck the exact pending owner and current totals before first dispatch. */
+  reaffirm?: true;
   limits: { soft?: number; hard?: number };
 }
 export interface CliTokenUsageAck { task: Task; hardExceeded: boolean; observedWorkTokens: number }
@@ -33,6 +35,7 @@ export async function recordCliTokenUsageFencedImpl(store: TaskStore, id: string
   if (request.projectId !== layer.projectId) throw new Error("CLI token project mismatch");
   if (!request.sessionId || !request.nativeSessionId || !request.projectId || !request.admission?.runId || !request.admission.agentId || !request.admission.nodeId || !Number.isSafeInteger(request.admission.leaseEpoch) || request.admission.leaseEpoch < 1 || !Array.isArray(request.observations) || request.observations.length > 4096 || !Number.isSafeInteger(request.cursor?.bytes) || request.cursor.bytes < 0 || typeof request.baseline !== "boolean" || Object.values(request.limits).some(value => value !== undefined && (!Number.isSafeInteger(value) || value < 0))) throw new Error("Invalid CLI token request");
   validateCliTokenCursor(request.cursor);
+  if (request.reaffirm !== undefined && request.reaffirm !== true) throw new Error("Invalid CLI pending reaffirmation");
   if (request.fresh !== undefined && request.fresh !== true) throw new Error("Invalid CLI fresh admission");
   return store.withTaskLock(id, async () => {
     const ack = await layer.transactionImmediate(async tx => {
@@ -51,12 +54,14 @@ export async function recordCliTokenUsageFencedImpl(store: TaskStore, id: string
       const previousCursor = ledger?.cursors?.[key];
       const previousOwner = ledger?.owners?.[key];
       if (previousOwner && (previousOwner.sessionId !== request.sessionId || previousOwner.runId !== a.runId || previousOwner.leaseEpoch !== a.leaseEpoch || previousOwner.agentId !== a.agentId || previousOwner.nodeId !== a.nodeId)) throw new Error("CLI token stream owner changed");
-      if (request.fresh) {
+      if (request.reaffirm) {
+        if (request.fresh || session.adapterId !== "codex" || !previousOwner || previousCursor?.phase !== "awaiting-file" || request.baseline || request.observations.length || request.cursor.phase !== "awaiting-file" || request.cursor.bytes !== 0 || request.cursor.fileIdentity !== undefined || request.cursor.transcriptPath !== previousCursor.transcriptPath) throw new Error("Invalid CLI pending reaffirmation");
+      } else if (request.fresh) {
         if (session.adapterId !== "codex" || Object.hasOwn(ledger?.sessions ?? {}, key) || request.baseline || request.observations.length || request.cursor.phase !== "awaiting-file" || request.cursor.fileIdentity !== undefined) throw new Error("CLI fresh admission already used or invalid");
       } else if (request.cursor.transcriptPath && !previousCursor) throw new Error("CLI native future stream lacks admission");
       else if (request.cursor.phase === "awaiting-file") throw new Error("CLI pending cursor requires fresh admission");
       if (previousCursor) {
-        if (previousCursor.transcriptPath !== request.cursor.transcriptPath || (previousCursor.fileIdentity && previousCursor.fileIdentity !== request.cursor.fileIdentity) || request.cursor.bytes < previousCursor.bytes || (previousCursor.phase === "awaiting-file" && (request.baseline || !request.cursor.fileIdentity))) throw new Error("CLI token stream identity changed");
+        if (previousCursor.transcriptPath !== request.cursor.transcriptPath || (previousCursor.fileIdentity && previousCursor.fileIdentity !== request.cursor.fileIdentity) || request.cursor.bytes < previousCursor.bytes || (previousCursor.phase === "awaiting-file" && !request.reaffirm && (request.baseline || !request.cursor.fileIdentity))) throw new Error("CLI token stream identity changed");
       }
 
       const baseline = request.baseline && !Object.hasOwn(ledger?.sessions ?? {}, key);

@@ -1,0 +1,116 @@
+
+ RUN  v4.1.10 /Users/man/worktrees/Fusion/303-codex-structured-handshake/packages/engine
+
+ ❯ |engine-default| src/__tests__/cli-codex-structured-pipeline.test.ts (7 tests | 2 failed) 862ms
+   × reaffirms absent-file admission after concurrent ownership change before dispatch 136ms
+   × reaffirms absent-file admission after concurrent budget change before dispatch 127ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |engine-default| src/__tests__/cli-codex-structured-pipeline.test.ts > reaffirms absent-file admission after concurrent ownership change before dispatch
+ FAIL  |engine-default| src/__tests__/cli-codex-structured-pipeline.test.ts > reaffirms absent-file admission after concurrent budget change before dispatch
+AssertionError: promise resolved "Buffer[ 123, 34, 109, 101, 116, …(-30) ]" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "data": [
++     123,
++     34,
++     109,
++     101,
++     116,
++     104,
++     111,
++     100,
++     34,
++     58,
++     34,
++     116,
++     117,
++     114,
++     110,
++     47,
++     115,
++     116,
++     97,
++     114,
++     116,
++     34,
++     44,
++     34,
++     116,
++     104,
++     114,
++     101,
++     97,
++     100,
++     73,
++     100,
++     34,
++     58,
++     34,
++     48,
++     49,
++     97,
++     48,
++     57,
++     101,
++     52,
++     49,
++     45,
++     52,
++     102,
++     98,
++     99,
++     45,
++     55,
++     51,
++     102,
++     51,
++     45,
++     57,
++     54,
++     100,
++     98,
++     45,
++     55,
++     51,
++     99,
++     100,
++     50,
++     101,
++     53,
++     56,
++     97,
++     56,
++     101,
++     50,
++     34,
++     125,
++   ],
++   "type": "Buffer",
+  }
+
+ ❯ src/__tests__/cli-codex-structured-pipeline.test.ts:115:35
+    113|   const f = await fixture(100, Promise.resolve(), Promise.resolve(), r…
+    114|   expect(await f.session.result()).toMatchObject({ kind: "killed" });
+    115|   await expect(readFile(f.receipt)).rejects.toThrow();
+       |                                   ^
+    116|   await f.exited;
+    117| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 5 passed (7)
+   Start at  01:25:21
+   Duration  4.27s (transform 2.29s, setup 71ms, import 3.22s, tests 862ms, environment 0ms)
+
+undefined
+/Users/man/worktrees/Fusion/303-codex-structured-handshake/packages/engine:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/__tests__/cli-codex-structured-pipeline.test.ts --project engine-default

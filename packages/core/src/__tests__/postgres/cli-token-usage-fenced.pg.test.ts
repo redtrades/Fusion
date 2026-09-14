@@ -68,4 +68,20 @@ pgDescribe("native CLI durable token accounting", () => {
     await expect(h.store().recordCliTokenUsageFenced(f.task.id, pending)).rejects.toThrow("ownership");
   });
 
+  it("reaffirms only the exact pending ownership and observes concurrent budget exhaustion", async () => {
+    const f = await fixture();
+    const pending: CliTokenUsageWrite = { ...f.request(0), fresh: true, observations: [], cursor: { bytes: 0, phase: "awaiting-file", transcriptPath: "/native/future.jsonl" } };
+    await h.store().recordCliTokenUsageFenced(f.task.id, pending);
+    const { fresh: _fresh, ...previous } = pending;
+    const reaffirm = { ...previous, reaffirm: true as const };
+    expect((await h.store().recordCliTokenUsageFenced(f.task.id, reaffirm)).observedWorkTokens).toBe(0);
+    await expect(h.store().recordCliTokenUsageFenced(f.task.id, { ...reaffirm, cursor: { ...reaffirm.cursor, transcriptPath: "/wrong/path" } })).rejects.toThrow();
+    await expect(h.store().recordCliTokenUsageFenced(f.task.id, pending)).rejects.toThrow("fresh");
+    const native = f.sessions.createSession({ projectId: "project-cli-tokens", taskId: f.task.id, adapterId: "codex", nativeSessionId: "concurrent", purpose: "execute" }); await f.sessions.flush();
+    await h.store().recordCliTokenUsageFenced(f.task.id, { ...f.request(21), sessionId: native.id, nativeSessionId: "concurrent" });
+    expect((await h.store().recordCliTokenUsageFenced(f.task.id, reaffirm)).hardExceeded).toBe(true);
+    await h.store().resetTaskPublication(f.task.id, "todo");
+    await expect(h.store().recordCliTokenUsageFenced(f.task.id, reaffirm)).rejects.toThrow("ownership");
+  });
+
 });

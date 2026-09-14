@@ -14,6 +14,7 @@ export interface CodexNativeIdentity { nativeSessionId: string; transcriptPath: 
 export interface CodexAppServerOptions {
   command: string; args: string[]; cwd: string; env: NodeJS.ProcessEnv;
   model?: string; modelProvider?: string; timeoutMs?: number;
+  codexSandbox?: "task-worktree-write";
   /** Test fixtures may select their isolated session root explicitly. */
   sessionsRoot?: string;
   onIdentity: (identity: CodexNativeIdentity) => Promise<void>;
@@ -76,7 +77,13 @@ export class CodexAppServerSession {
 
     await this.request("initialize", { clientInfo: { name: "fusion_native_codex", version: "1" }, capabilities: { experimentalApi: true } });
     this.send({ method: "initialized", params: {} });
-    const response = await this.request("thread/start", { cwd: this.options.cwd, ...(this.options.model ? { model: this.options.model } : {}), ...(this.options.modelProvider ? { modelProvider: this.options.modelProvider } : {}), ephemeral: false, allowProviderModelFallback: false });
+    const cwd = this.options.codexSandbox ? await realpath(this.options.cwd) : this.options.cwd;
+    const sandbox = this.options.codexSandbox ? { sandbox: "workspace-write", runtimeWorkspaceRoots: [cwd], config: {
+      "sandbox_workspace_write.writable_roots": [], "sandbox_workspace_write.network_access": false,
+      "sandbox_workspace_write.exclude_tmpdir_env_var": true, "sandbox_workspace_write.exclude_slash_tmp": true,
+    } } : {};
+    const response = await this.request("thread/start", { cwd, ...sandbox, ...(this.options.model ? { model: this.options.model } : {}), ...(this.options.modelProvider ? { modelProvider: this.options.modelProvider } : {}), ephemeral: false, allowProviderModelFallback: false });
+    if (this.options.codexSandbox) await this.verifySandbox(response, cwd);
     const thread = object(response.thread);
     if (typeof thread.id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(thread.id) || thread.id !== thread.sessionId || thread.ephemeral !== false) throw new Error("Unsupported Codex root-thread identity");
     if (typeof thread.path !== "string" || !isAbsolute(thread.path) || thread.path.length > 4096) throw new Error("Codex native rollout path unavailable");
@@ -91,6 +98,22 @@ export class CodexAppServerSession {
     const identity = { nativeSessionId: thread.id, transcriptPath: thread.path, selectedModel: response.model, selectedProvider: response.modelProvider };
     await this.options.onIdentity({ ...identity });
     this.check(); this.nativeIdentity = identity;
+  }
+  /**
+   * FNXC:AuthorSandbox 2026-09-14-07:52: Author tools may write only the native
+   * task worktree. Effective policy is checked before identity admission, not
+   * inferred from requested settings; unknown permission profiles fail closed.
+   */
+  private async verifySandbox(response: Record<string, unknown>, cwd: string): Promise<void> {
+    const policy = object(response.sandbox);
+    if (policy.type !== "workspaceWrite" || policy.networkAccess !== false
+      || policy.excludeTmpdirEnvVar !== true || policy.excludeSlashTmp !== true
+      || response.activePermissionProfile !== null) throw new Error("Codex author sandbox policy mismatch");
+    const roots = response.runtimeWorkspaceRoots;
+    if (!Array.isArray(roots) || roots.length !== 1 || !Array.isArray(policy.writableRoots)) throw new Error("Codex author sandbox roots unavailable");
+    for (const root of [...roots, ...policy.writableRoots]) {
+      if (typeof root !== "string" || !isAbsolute(root) || await realpath(root) !== cwd) throw new Error("Codex author sandbox root mismatch");
+    }
   }
   async turn(text: string): Promise<void> {
     await this.ready(); this.check();

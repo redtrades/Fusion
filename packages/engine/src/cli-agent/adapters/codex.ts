@@ -88,6 +88,8 @@ const DEFAULT_COMMAND = "codex";
  * so a bare `codex` still launches without telemetry wiring.
  */
 export interface CodexLaunchSettings {
+  /** Native structured task launch only; never an arbitrary writable path. */
+  codexSandbox?: "task-worktree-write";
   /** Override the `codex` binary. */
   command?: string;
   /** Extra args appended after the computed base args. */

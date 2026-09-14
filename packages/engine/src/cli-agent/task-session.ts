@@ -229,6 +229,10 @@ export class CliTaskSession {
   static async launch(opts: LaunchCliTaskSessionOptions): Promise<CliTaskSession> {
     const log = opts.log ?? (() => {});
     const adapter = opts.registry.get(opts.config.cliAdapterId);
+    if (opts.config.settings?.codexSandbox !== undefined && (opts.config.settings.codexSandbox !== "task-worktree-write"
+      || adapter.id !== "codex" || !opts.usageProtection || !opts.worktreePath)) {
+      throw new Error("Codex task sandbox requires a fresh protected structured task session");
+    }
     if (opts.usageProtection && !["codex", "claude-code"].includes(adapter.id)) throw new Error("CLI observed token accounting unsupported for adapter");
 
     // 0. Autonomy approval gate (U15). Resolve the EFFECTIVE posture from the

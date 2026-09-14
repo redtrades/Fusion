@@ -18,7 +18,7 @@ vi.mock("node:child_process", async importOriginal => {
 });
 const cleanup: Array<() => Promise<unknown> | void> = [];
 afterEach(async () => { for (const release of cleanup.splice(0).reverse()) await release(); });
-async function fixture(hard = 100, admissionGate = Promise.resolve(), drainGate = Promise.resolve(), invalidateAfterAdmission?: "ownership" | "budget") {
+async function fixture(hard = 100, admissionGate = Promise.resolve(), drainGate = Promise.resolve(), invalidateAfterAdmission?: "ownership" | "budget", sandbox = false) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "fusion-structured-fixture-")));
   cleanup.push(() => rm(root, { recursive: true, force: true }));
   const nativeId = "01a09e41-4fbc-73f3-96db-73cd2e58a8e2", transcript = join(root, ".codex", "sessions", "future.jsonl"), receipt = join(root, "turn-receipt.json");
@@ -26,12 +26,12 @@ async function fixture(hard = 100, admissionGate = Promise.resolve(), drainGate 
   await writeFile(command, `#!${process.execPath}
 if(process.argv.includes("--version")){console.log("codex-cli 0.154.0");process.exit(0);}
 const fs=require('node:fs'),rl=require('node:readline').createInterface({input:process.stdin});
-const send=x=>process.stdout.write(JSON.stringify(x)+'\\n');
+let threadStart; const send=x=>process.stdout.write(JSON.stringify(x)+'\\n');
 rl.on('line',line=>{const q=JSON.parse(line);if(!q.id)return;
 if(q.method==='initialize')return send({id:q.id,result:{}});
-if(q.method==='thread/start')return send({id:q.id,result:{model:'chosen',modelProvider:'openai',cwd:${JSON.stringify(root)},thread:{id:${JSON.stringify(nativeId)},sessionId:${JSON.stringify(nativeId)},path:${JSON.stringify(transcript)},cwd:${JSON.stringify(root)},ephemeral:false}}});
+if(q.method==='thread/start')return threadStart=q.params,send({id:q.id,result:{runtimeWorkspaceRoots:[${JSON.stringify(root)}],sandbox:{type:'workspaceWrite',writableRoots:[],networkAccess:false,excludeTmpdirEnvVar:true,excludeSlashTmp:true},activePermissionProfile:null,model:'chosen',modelProvider:'openai',cwd:${JSON.stringify(root)},thread:{id:${JSON.stringify(nativeId)},sessionId:${JSON.stringify(nativeId)},path:${JSON.stringify(transcript)},cwd:${JSON.stringify(root)},ephemeral:false}}});
 if(q.method==='turn/start'){
-fs.writeFileSync(${JSON.stringify(receipt)},JSON.stringify({method:q.method,threadId:q.params.threadId}));
+fs.writeFileSync(${JSON.stringify(receipt)},JSON.stringify({method:q.method,threadId:q.params.threadId,threadStart}));
 send({id:q.id,result:{turn:{id:'turn-1'}}});send({method:'turn/completed',params:{threadId:${JSON.stringify(nativeId)},turn:{id:'turn-1',status:'completed'}}});
 setTimeout(()=>{fs.mkdirSync(${JSON.stringify(join(root, ".codex", "sessions"))},{recursive:true});fs.writeFileSync(${JSON.stringify(transcript)},JSON.stringify({type:'session_meta',payload:{id:${JSON.stringify(nativeId)},cwd:${JSON.stringify(root)}}})+'\\n'+JSON.stringify({type:'event_msg',payload:{type:'token_count',info:{total_token_usage:{input_tokens:9,cached_input_tokens:2,output_tokens:3}}}})+'\\n');},30);
 }});`);
@@ -49,7 +49,7 @@ setTimeout(()=>{fs.mkdirSync(${JSON.stringify(join(root, ".codex", "sessions"))}
   let total = 0, ledger: CliTokenLedger | undefined; const writes: CliTokenUsageWrite[] = [];
   const previousHome = process.env.HOME, previousCodexHome = process.env.CODEX_HOME; process.env.HOME = root; process.env.CODEX_HOME = join(root, ".codex");
   let session;
-  try { session = await launchCliTaskSession({ taskId: "task", projectId: "project", worktreePath: root, prompt: "synthetic fixture only", config: { cliAdapterId: "codex", settings: { command, model: "chosen" } }, manager, hub, registry, hookDirRoot: root, hookEndpointUrl: "http://127.0.0.1:45000/unused", usageProtection: {
+  try { session = await launchCliTaskSession({ taskId: "task", projectId: "project", worktreePath: root, prompt: "synthetic fixture only", config: { cliAdapterId: "codex", settings: { command, model: "chosen", ...(sandbox ? { codexSandbox: "task-worktree-write" } : {}) } }, manager, hub, registry, hookDirRoot: root, hookEndpointUrl: "http://127.0.0.1:45000/unused", usageProtection: {
     sessions: store, admission: { runId: "run", leaseEpoch: 1, agentId: "agent", nodeId: "host" }, limits: { hard }, pollMs: 5,
     store: { recordCliTokenUsageFenced: async (_task, input) => {
       if (input.fresh) await admissionGate;
@@ -114,4 +114,35 @@ it.each(["ownership", "budget"] as const)("reaffirms absent-file admission after
   expect(await f.session.result()).toMatchObject({ kind: "killed" });
   await expect(readFile(f.receipt)).rejects.toThrow();
   await f.exited;
+});
+
+it.each([
+  { adapterId: "codex" },
+  { adapterId: "claude-code", codexStructured: { admit: async () => {} } },
+  { adapterId: "codex", codexStructured: { admit: async () => {} }, resume: { sessionId: "old", nativeSessionId: "old" } },
+  { adapterId: "codex", codexStructured: { admit: async () => {} }, settings: { codexSandbox: "unknown" } },
+])("refuses unsupported selected sandbox without session creation or PTY fallback: %j", async option => {
+  const registry = new CliAdapterRegistry(); registry.register(codexAdapter);
+  const created = vi.fn(() => { throw new Error("unexpected record creation"); });
+  const store = Object.assign(new EventEmitter(), { listSessions: () => [], createSession: created }) as unknown as CliSessionStore;
+  const loadPty = vi.fn(async () => { throw new Error("unexpected PTY"); });
+  const manager = new CliSessionManager({ store, registry, loadPty });
+  cleanup.push(() => manager.dispose());
+  await expect(manager.spawn({ projectId: "project", purpose: "execute", taskId: "task", worktreePath: "/unused", settings: { codexSandbox: "task-worktree-write" }, ...option })).rejects.toThrow(/sandbox/i);
+  expect(created).not.toHaveBeenCalled(); expect(loadPty).not.toHaveBeenCalled();
+});
+
+it("selected native task sandbox retains identity admission and drained actual usage", async () => {
+  const f = await fixture(100, Promise.resolve(), Promise.resolve(), undefined, true);
+  expect(await f.session.result()).toMatchObject({ kind: "success" });
+  expect(f.writes[0]).toMatchObject({ fresh: true, cursor: { phase: "awaiting-file" } });
+  expect(f.writes.at(-1)?.cursor.phase).toBe("drained"); expect(f.total()).toBe(10);
+  expect(JSON.parse(await readFile(f.receipt, "utf8"))).toMatchObject({ method: "turn/start", threadStart: {
+    sandbox: "workspace-write", config: { "sandbox_workspace_write.network_access": false, "sandbox_workspace_write.exclude_tmpdir_env_var": true, "sandbox_workspace_write.exclude_slash_tmp": true },
+  } });
+  await f.session.reap(); await f.exited;
+});
+it("selected task launch without protected accounting refuses before approval or hook side effects", async () => {
+  const registry = new CliAdapterRegistry(); registry.register(codexAdapter);
+  await expect(launchCliTaskSession({ registry, config: { cliAdapterId: "codex", settings: { codexSandbox: "task-worktree-write" } }, worktreePath: "/unused" } as any)).rejects.toThrow(/sandbox/);
 });

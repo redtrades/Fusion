@@ -489,7 +489,7 @@ export function prepareWorkflowOverlayStateWrite(current: Task, request: Workflo
     if (!isDeepStrictEqual(stored.receipts, nextState.receipts.slice(0, expectedPhaseCount))) return { applied: false, reason: "invalid-checkpoint" };
   } else if (expectedPhaseCount !== 0) return { applied: false, reason: "revision-mismatch" };
   const checkpoint: StoredWorkflowOverlayState = { ...nextState, writeFence: { admission, operationId, expectedPhaseCount } };
-  const nextNamespace = { runs: { ...runs, [nextState.runId]: checkpoint } };
+  const nextNamespace = { ...(namespace as Record<string, unknown> | undefined), runs: { ...runs, [nextState.runId]: checkpoint } };
   if (totalPhases >= WORKFLOW_OVERLAY_MAX_PHASES || Buffer.byteLength(JSON.stringify(nextNamespace), "utf8") > WORKFLOW_OVERLAY_MAX_BYTES) {
     return { applied: false, reason: "invalid-input" };
   }

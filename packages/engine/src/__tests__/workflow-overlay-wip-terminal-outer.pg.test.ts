@@ -19,9 +19,10 @@ pgDescribe("committed WIP terminal suspension through outer graph failure", () =
         { id: "escalated", name: "Escalated", traits: [{ trait: "hold", config: { release: "manual" } }, { trait: "human-review" }] },
       ],
       nodes: [{ id: "start", kind: "start", column: "in-progress" }, { id: "end", kind: "end", column: "in-progress" },
+        { id: "builder", kind: "agent", column: "in-progress", config: {} },
         { id: "blocked-sink", kind: "gate", column: "blocked", config: { workflowAction: "block-sink" } },
         { id: "escalated-sink", kind: "gate", column: "escalated", config: { workflowAction: "block-sink" } }],
-      edges: [{ from: "start", to: "end", condition: "success" }, { from: "start", to: "blocked-sink", condition: "outcome:blocked" },
+      edges: [{ from: "start", to: "builder", condition: "success" }, { from: "builder", to: "end", condition: "success" }, { from: "start", to: "blocked-sink", condition: "outcome:blocked" },
         { from: "start", to: "escalated-sink", condition: "outcome:escalated" }],
     } });
     // A terminal disposition suspends native WIP in place; it does not move backward into a hold role.
@@ -30,6 +31,7 @@ pgDescribe("committed WIP terminal suspension through outer graph failure", () =
     const admission = { runId: "checkout-outer", leaseEpoch: 1, agentId: "agent-outer", nodeId: "host-outer" };
     await store.updateTask(task.id, { checkedOutBy: admission.agentId, checkoutNodeId: admission.nodeId,
       checkoutRunId: admission.runId, checkoutLeaseEpoch: admission.leaseEpoch });
+    const original = await store.replaceActiveTaskWorkflowContinuation({ taskId: task.id, runId: "original-graph", nodeId: "builder", kind: "task", state: "running" });
     const terminalBlock = { reason: "missing-input", blockingNodeId: "builder", resumeActor: "orchestrator",
       blockedAt: "2026-09-14T00:00:00Z", envelopeDigests: [] };
     const terminalRequest = { admission, expectedPhaseCount: 0,
@@ -50,6 +52,11 @@ pgDescribe("committed WIP terminal suspension through outer graph failure", () =
     const committed = await store.getTask(task.id);
     expect(committed).toMatchObject({ column: "in-progress", paused: true, status: "paused",
       pausedReason: "missing-input", error: "missing-input" });
+    const anchor = (committed.sourceMetadata!.procedureEngineLive as { currentTerminal: { heldWorkItemId: string } }).currentTerminal;
+    expect(anchor).toBeTruthy();
+    expect((await store.getWorkflowWorkItem(anchor.heldWorkItemId))?.state).toBe("held");
+    expect((await store.getWorkflowWorkItem(original.id))?.state).toBe("succeeded");
+    await expect(store.transitionWorkflowWorkItem(original.id, "failed")).rejects.toThrow();
     const executor = new TaskExecutor(store, h.rootDir());
     const execute = vi.spyOn(executor, "execute");
     const move = vi.spyOn(store, "moveTask");
@@ -67,6 +74,7 @@ pgDescribe("committed WIP terminal suspension through outer graph failure", () =
     expect(after.sourceMetadata).toEqual(committed.sourceMetadata);
     expect(after.status).toBe(committed.status);
     expect(after.error).toBe(committed.error);
+    expect((await store.getWorkflowWorkItem(anchor.heldWorkItemId))?.state).toBe("held");
     expect(move).not.toHaveBeenCalled();
     expect(execute).not.toHaveBeenCalled();
     expect(remediation).not.toHaveBeenCalled();

@@ -1,0 +1,97 @@
+Isolated test database ready on ephemeral port 56271
+
+ RUN  v4.1.10 /Users/man/worktrees/Fusion/268-step-projection-red/packages/core
+
+stderr | src/__tests__/postgres/deterministic-step-projection.pg.test.ts > deterministic script task projection candidate
+<NUL>fnlvl=info<NUL>[postgres-connection] external backend resolved (DATABASE_URL set): postgresql://postgres:********@127.0.0.1:56271/fusion_schema_template_76222_goldenestworkersox9wcy | planning lifecycle direct session: none (pooled endpoint — set DATABASE_MIGRATION_URL to a direct connection)
+
+stderr | src/__tests__/postgres/deterministic-step-projection.pg.test.ts > deterministic script task projection candidate
+<NUL>fnlvl=info<NUL>[postgres-connection] external backend resolved (DATABASE_URL set): postgresql://postgres:********@127.0.0.1:56271/fusion_a2_red_76230_1_qlhqg6 | planning lifecycle direct session: migration URL
+
+stderr | src/__tests__/postgres/deterministic-step-projection.pg.test.ts > deterministic script task projection candidate
+<NUL>fnlvl=warn<NUL>[task-store] Patchnode reconciliation failed during backend init {
+  phase: 'init:patchnode-reconcile',
+  error: 'Patchnode requires AsyncDataLayer.projectId'
+}
+
+x·····xx
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/postgres/deterministic-step-projection.pg.test.ts > deterministic script task projection candidate > starts the native step before script execution and completes it after blocking success
+AssertionError: expected [ 'pending' ] to deeply equal [ 'in-progress' ]
+
+- Expected
++ Received
+
+  [
+-   "in-progress",
++   "pending",
+  ]
+
+ ❯ src/__tests__/postgres/deterministic-step-projection.pg.test.ts:34:32
+     32|     } } });
+     33|     await executor.run(task, { experimentalFeatures: { workflowGraphEx…
+     34|     expect.soft(entryStatuses).toEqual(["in-progress"]);
+       |                                ^
+     35|     expect((await h.store().getTask(task.id)).steps[0].status).toBe("d…
+     36|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  src/__tests__/postgres/deterministic-step-projection.pg.test.ts > deterministic script task projection candidate > starts the native step before script execution and completes it after blocking success
+AssertionError: expected 'pending' to be 'done' // Object.is equality
+
+Expected: "done"
+Received: "pending"
+
+ ❯ src/__tests__/postgres/deterministic-step-projection.pg.test.ts:35:64
+     33|     await executor.run(task, { experimentalFeatures: { workflowGraphEx…
+     34|     expect.soft(entryStatuses).toEqual(["in-progress"]);
+     35|     expect((await h.store().getTask(task.id)).steps[0].status).toBe("d…
+       |                                                                ^
+     36|   });
+     37|   it("native start rejects a dependent script before a command can run…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  src/__tests__/postgres/deterministic-step-projection.pg.test.ts > deterministic script task projection candidate > refuses stale native completion after reset-replan while command is in flight
+AssertionError: expected 'done' not to be 'done' // Object.is equality
+ ❯ src/__tests__/postgres/deterministic-step-projection.pg.test.ts:81:41
+     79|     await lateCompletion;
+     80|     const current = await store.getTask(task.id);
+     81|     expect(current.steps[0].status).not.toBe("done");
+       |                                         ^
+     82|     if (supersession === "reset-replan") expect(current.steps[0].name)…
+     83|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  src/__tests__/postgres/deterministic-step-projection.pg.test.ts > deterministic script task projection candidate > refuses stale native completion after checkout-release while command is in flight
+AssertionError: expected 'agent-old' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"agent-old"
+
+ ❯ src/__tests__/postgres/deterministic-step-projection.pg.test.ts:75:39
+     73|       expect(superseded.steps[0]).toMatchObject({ name: "New owner's a…
+     74|     } else {
+     75|       expect(superseded.checkedOutBy).toBeUndefined();
+       |                                       ^
+     76|       expect(superseded.checkoutRunId).toBeUndefined();
+     77|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 5 passed (8)
+   Start at  02:04:01
+   Duration  6.60s (transform 2.86s, setup 106ms, import 4.70s, tests 1.68s, environment 0ms)
+
+undefined
+/Users/man/worktrees/Fusion/268-step-projection-red/packages/core:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/__tests__/postgres/deterministic-step-projection.pg.test.ts --reporter=dot

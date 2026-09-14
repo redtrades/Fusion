@@ -1,0 +1,15 @@
+{
+  "final-tests.log.gz": "90d71cbc54fe6dea6f59e866c09a086cf04992e9cce60dff90e1b5df73657b6d",
+  "typecheck.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+  "static.log.gz": "3eadeb26e1f27eb8375f1d027eb41e49a503507bcc362a7b76485621c6120be7",
+  "build.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+  "green.log.gz": "437c81cbcffe4242058e468176d2debb632c8d185275b033bbdb7dcc91743dda",
+  "transport-red.log.gz": "3da3a64d33ca0d4cf85770410ca5c0f25d70f349cc61146fa5043d9797ed4f2f",
+  "changeset.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+  "PLAN.md": "b25453f3b4aec8eabcdad91c5b70bb217c0cecd0644e29a73492c2ed640e4776",
+  "derivation-green.log.gz": "74c7e00f0c867468f8d2d68b747d41ee352c88535954bf046e155afc616275be",
+  "red.log.gz": "d8bc84f11a99dbe9d36cd5764937b5917883aecc74eac6db2f84a4afa01c1e50",
+  "HANDOFF.md": "bbb88eda3a1155081bbd7a13a64f9fe20799330e112afae699010fb0d318013c",
+  "file-types-red.log.gz": "d78a4c43e3f689c6c9f34bcfa5cfc72943207d07d097b91f5ebc8fb2073cacdb",
+  "lint.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+}

@@ -12,6 +12,93 @@ import { appendPatchnodeEntryInTransaction } from "./async/async-patchnode.js";
 import * as schema from "../postgres/schema/index.js";
 import {TaskDeletedError, HandoffInvariantViolationError, TransitionRejectionError} from "./errors.js";
 
+import { isDeepStrictEqual } from "node:util";
+import { ownWorkflowOverlayStateWrite, prepareWorkflowOverlayStateWrite, WORKFLOW_OVERLAY_MAX_BYTES,
+  type WorkflowOverlayStateWrite, type WorkflowOverlayStateWriteResult, type StoredWorkflowOverlayState } from "./task-mutation-ops.js";
+
+export interface WorkflowOverlayTerminalWrite extends WorkflowOverlayStateWrite {
+  expectedColumn: string;
+  targetColumn: string;
+}
+export type WorkflowOverlayTerminalResult = WorkflowOverlayStateWriteResult
+  | { applied: false; reason: "column-mismatch" | "transition-superseded" };
+export class WorkflowOverlayTerminalRejected extends Error {
+  constructor(readonly reason: Extract<WorkflowOverlayTerminalResult, { applied: false }>["reason"]) {
+    super(`workflow overlay terminal ${reason}`);
+  }
+}
+
+/** @internal A persisted xmin is usable only within an unambiguous full-XID age window. */
+export function isWorkflowOverlayRowRevisionCurrent(fullTransactionId: string, rowRevision: string, currentFullTransactionId: string): boolean {
+  if (![fullTransactionId, rowRevision, currentFullTransactionId].every(v => typeof v === "string" && /^\d{1,20}$/.test(v))) return false;
+  const age = BigInt(currentFullTransactionId) - BigInt(fullTransactionId);
+  return age >= 0n && age < 2147483648n && (BigInt(fullTransactionId) % 4294967296n).toString() === rowRevision;
+}
+
+/**
+ * FNXC:WorkflowOverlay 2026-09-14-01:40:
+ * Terminal meaning is an immutable overlay receipt; lifecycle policy and all column side effects
+ * remain in the existing move transaction. Replay is limited to the exact committed row revision.
+ * Store full transaction identity and reject the ambiguous half-wrap window; xmin alone wraps.
+ */
+export async function applyWorkflowOverlayTerminalFencedImpl(
+  store: TaskStore, id: string, input: WorkflowOverlayTerminalWrite,
+): Promise<WorkflowOverlayTerminalResult> {
+  const layer = store.asyncLayer;
+  if (!layer?.projectId) return { applied: false, reason: "unavailable" };
+  const request = ownWorkflowOverlayStateWrite(input);
+  if (!request || ![input.expectedColumn, input.targetColumn].every(v => typeof v === "string" && v.length > 0 && v.length <= 256)) {
+    return { applied: false, reason: "invalid-input" };
+  }
+  const expectedColumn = input.expectedColumn, targetColumn = input.targetColumn;
+  return store.withTaskLock(id, async () => {
+    const snapshot = await layer.transactionImmediate(async tx => {
+      await acquireTaskAdvisoryXactLock(tx, layer.projectId, id);
+      const [version] = await tx.select({ rowRevision: sql<string>`xmin::text`, fullTransactionId: sql<string>`txid_current()::text` })
+        .from(schema.project.tasks).where(and(eq(schema.project.tasks.id, id), eq(schema.project.tasks.projectId, layer.projectId!))).for("update");
+      const row = await readTaskRowInTransaction(tx, id, { includeDeleted: true }, layer.projectId);
+      if (!row || !version) return { result: { applied: false, reason: "task-missing" } as WorkflowOverlayTerminalResult };
+      if (row.deletedAt) return { result: { applied: false, reason: "task-deleted" } as WorkflowOverlayTerminalResult };
+      const current = store.rowToTask(store.pgRowToTaskRow(row));
+      const runs = (current.sourceMetadata?.procedureEngineLive as { runs?: Record<string, StoredWorkflowOverlayState> } | undefined)?.runs;
+      const checkpoint = runs && Object.hasOwn(runs, request.nextState.runId) ? runs[request.nextState.runId] : undefined;
+      const terminal = checkpoint?.writeFence?.terminal;
+      if (terminal) {
+        const { writeFence, ...state } = checkpoint!;
+        const unambiguous = isWorkflowOverlayRowRevisionCurrent(terminal.fullTransactionId, terminal.rowRevision, version.fullTransactionId);
+        if (unambiguous && version.rowRevision === terminal.rowRevision && current.column === targetColumn
+            && terminal.targetColumn === targetColumn && terminal.expectedColumn === expectedColumn
+            && current.checkoutLeaseEpoch === request.admission.leaseEpoch
+            && isDeepStrictEqual(writeFence.admission, request.admission)
+            && writeFence.operationId === request.operationId && writeFence.expectedPhaseCount === request.expectedPhaseCount
+            && isDeepStrictEqual(state, request.nextState)) {
+          return { result: { applied: true, task: current, state, replayed: true } as WorkflowOverlayTerminalResult };
+        }
+        return { result: { applied: false, reason: "transition-superseded" } as WorkflowOverlayTerminalResult };
+      }
+      const prepared = prepareWorkflowOverlayStateWrite(current, request);
+      if (!prepared.applied) return { result: prepared };
+      if (prepared.replayed) return { result: { applied: false, reason: "transition-superseded" } as WorkflowOverlayTerminalResult };
+      if (current.column !== expectedColumn) return { result: { applied: false, reason: "column-mismatch" } as WorkflowOverlayTerminalResult };
+      return { current, rowRevision: version.rowRevision };
+    });
+    if (snapshot.result) return snapshot.result;
+    const options: MoveTaskOptions = { moveSource: "engine", workflowMoveSource: "workflow-graph" };
+    const movePolicyPreflight = await store.prepareWorkflowMovePolicyPreflight(id, targetColumn, options, { fromHandoff: false });
+    try {
+      const task = await store.moveTaskInternal(id, targetColumn, options, {
+        fromHandoff: false, movePolicyPreflight,
+        runContext: { runId: request.admission.runId, agentId: request.admission.agentId },
+        workflowOverlayTerminal: { request, expectedColumn, targetColumn, expectedRowRevision: snapshot.rowRevision! },
+      }, snapshot.current);
+      return { applied: true, task, state: request.nextState, replayed: false };
+    } catch (error) {
+      if (error instanceof WorkflowOverlayTerminalRejected) return { applied: false, reason: error.reason };
+      throw error;
+    }
+  });
+}
+
 /** @internal A fenced terminal-failure apply lost ownership before its move transaction. */
 export class TerminalFailureApplyRejected extends Error {
   constructor(readonly outcome: "superseded" | "not-failed" | "deleted" | "no-budget") {
@@ -504,7 +591,7 @@ export async function moveTaskInternalImpl(store: TaskStore, id: string, toColum
     */
     const moveReviewColumns = workflowIr ? new Set(resolveReviewColumns(workflowIr)) : undefined;
 
-    if (task.column === toColumn && !internal.terminalFailureApply) {
+    if (task.column === toColumn && !internal.terminalFailureApply && !internal.workflowOverlayTerminal) {
       /*
       FNXC:WorkflowResolvedColumns 2026-07-31-17:20 (fleet — the same-column handoff target):
       A MOVE TARGET, resolved from the set already computed three lines above.
@@ -623,7 +710,7 @@ export async function moveTaskInternalImpl(store: TaskStore, id: string, toColum
     const fromColumn = task.column;
     // A fenced recovery apply may already be in its rebound column; it still needs the transaction
     // to persist the failure clear and consume the fence, but must not become an invalid self-move.
-    const terminalFailureApplySameColumn = internal.terminalFailureApply !== undefined && fromColumn === toColumn;
+    const terminalFailureApplySameColumn = (internal.terminalFailureApply !== undefined || internal.workflowOverlayTerminal !== undefined) && fromColumn === toColumn;
 
     if (workflowIr) {
       // ── Flag-ON validation + sync guards (typed rejections, KTD-3/R13) ─────
@@ -1162,6 +1249,28 @@ export async function moveTaskInternalImpl(store: TaskStore, id: string, toColum
       (the failure mode that made the R1 sentinel unbindable).
       */
       await acquireTaskAdvisoryXactLock(tx, layer.projectId, id);
+      if (internal.workflowOverlayTerminal) {
+        const fence = internal.workflowOverlayTerminal;
+        const [version] = await tx.select({ rowRevision: sql<string>`xmin::text`, fullTransactionId: sql<string>`txid_current()::text` })
+          .from(schema.project.tasks).where(and(eq(schema.project.tasks.id, id), eq(schema.project.tasks.projectId, layer.projectId!))).for("update");
+        const row = await readTaskRowInTransaction(tx, id, { includeDeleted: true }, layer.projectId);
+        if (!row || !version) throw new WorkflowOverlayTerminalRejected("task-missing");
+        if (row.deletedAt) throw new WorkflowOverlayTerminalRejected("task-deleted");
+        const live = store.rowToTask(store.pgRowToTaskRow(row));
+        if (version.rowRevision !== fence.expectedRowRevision) throw new WorkflowOverlayTerminalRejected("transition-superseded");
+        if (live.column !== fence.expectedColumn || toColumn !== fence.targetColumn) throw new WorkflowOverlayTerminalRejected("column-mismatch");
+        const prepared = prepareWorkflowOverlayStateWrite(live, fence.request);
+        if (!prepared.applied) throw new WorkflowOverlayTerminalRejected(prepared.reason);
+        if (prepared.replayed) throw new WorkflowOverlayTerminalRejected("transition-superseded");
+        const namespace = prepared.task.sourceMetadata!.procedureEngineLive as { runs: Record<string, StoredWorkflowOverlayState> };
+        namespace.runs[fence.request.nextState.runId].writeFence.terminal = {
+          targetColumn: toColumn, expectedColumn: fence.expectedColumn,
+          fullTransactionId: version.fullTransactionId,
+          rowRevision: (BigInt(version.fullTransactionId) % 4294967296n).toString(),
+        };
+        if (Buffer.byteLength(JSON.stringify(namespace), "utf8") > WORKFLOW_OVERLAY_MAX_BYTES) throw new WorkflowOverlayTerminalRejected("invalid-input");
+        task.sourceMetadata = prepared.task.sourceMetadata;
+      }
       if (internal.terminalFailureApply) {
         /*
         FNXC:TaskWedgeNotifications 2026-08-10-20:40:
@@ -1221,6 +1330,15 @@ export async function moveTaskInternalImpl(store: TaskStore, id: string, toColum
       // FNXC:MultiProjectIsolation 2026-07-10: pass the bound projectId (stamped
       // on insert, preserved on update) so partitioning survives moves.
       await upsertTaskRowInTransaction(tx, task as unknown as Record<string, unknown>, context, layer.projectId);
+      if (internal.workflowOverlayTerminal) {
+        const [written] = await tx.select({ rowRevision: sql<string>`xmin::text` }).from(schema.project.tasks)
+          .where(and(eq(schema.project.tasks.id, id), eq(schema.project.tasks.projectId, layer.projectId!)));
+        const namespace = task.sourceMetadata!.procedureEngineLive as { runs: Record<string, StoredWorkflowOverlayState> };
+        if (written?.rowRevision !== namespace.runs[internal.workflowOverlayTerminal.request.nextState.runId].writeFence.terminal!.rowRevision) {
+          throw new WorkflowOverlayTerminalRejected("transition-superseded");
+        }
+      }
+
 
       // U4 (flag-ON) parity with the SQLite branch below: write the
       // crash-safe transitionPending marker in the SAME transaction as the
@@ -1507,7 +1625,36 @@ export async function moveTaskInternalImpl(store: TaskStore, id: string, toColum
         }
       }
       try {
-                await clearTransitionPendingAsync(store.asyncLayer!.db, id);
+        if (internal.workflowOverlayTerminal) {
+          // FNXC:WorkflowOverlay 2026-09-14-01:40: Clearing the native pending marker changes xmin; advance only our still-current terminal fence in that same transaction.
+          const advanced = await store.asyncLayer!.transactionImmediate(async tx => {
+            const projectId = store.asyncLayer!.projectId!;
+            await acquireTaskAdvisoryXactLock(tx, projectId, id);
+            const [version] = await tx.select({ rowRevision: sql<string>`xmin::text`, fullTransactionId: sql<string>`txid_current()::text` })
+              .from(schema.project.tasks).where(and(eq(schema.project.tasks.id, id), eq(schema.project.tasks.projectId, projectId))).for("update");
+            const expected = (task.sourceMetadata!.procedureEngineLive as { runs: Record<string, StoredWorkflowOverlayState> }).runs[internal.workflowOverlayTerminal!.request.nextState.runId].writeFence.terminal!;
+            if (!version || version.rowRevision !== expected.rowRevision) return false;
+            if (!isWorkflowOverlayRowRevisionCurrent(expected.fullTransactionId, expected.rowRevision, version.fullTransactionId)) return false;
+            const metadata = structuredClone(task.sourceMetadata!);
+            const terminal = (metadata.procedureEngineLive as { runs: Record<string, StoredWorkflowOverlayState> }).runs[internal.workflowOverlayTerminal!.request.nextState.runId].writeFence.terminal!;
+            terminal.fullTransactionId = version.fullTransactionId;
+            terminal.rowRevision = (BigInt(version.fullTransactionId) % 4294967296n).toString();
+            await clearTransitionPendingAsync(tx, id);
+            await tx.update(schema.project.tasks).set({ sourceMetadata: metadata })
+              .where(and(eq(schema.project.tasks.id, id), eq(schema.project.tasks.projectId, projectId)));
+            const [written] = await tx.select({ rowRevision: sql<string>`xmin::text` }).from(schema.project.tasks)
+              .where(and(eq(schema.project.tasks.id, id), eq(schema.project.tasks.projectId, projectId)));
+            if (written?.rowRevision !== terminal.rowRevision) throw new WorkflowOverlayTerminalRejected("transition-superseded");
+            task.sourceMetadata = metadata;
+            return true;
+          });
+          if (advanced) {
+            await store.writeTaskJsonFile(dir, task);
+            if (store.isWatching) store.taskCache.set(id, { ...task });
+          }
+        } else {
+          await clearTransitionPendingAsync(store.asyncLayer!.db, id);
+        }
 
       } catch {
         // Clearing is best-effort; the marker recovery sweep is the backstop.

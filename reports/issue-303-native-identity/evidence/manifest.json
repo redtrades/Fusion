@@ -1,0 +1,130 @@
+{
+  "sourceRevision": "c7d04532315ce85fd072a33f4446b79edb905065",
+  "artifacts": [
+    {
+      "source": "/tmp/303-identity-capability-red.log",
+      "artifact": "303-identity-capability-red.log.gz",
+      "rawBytes": 1833,
+      "rawSha256": "4e427ea0db1dc9c38bd6003e492dfdb4352c420beec0a63960babd0e242fc176",
+      "gzipSha256": "a2d6e589bf29d6049b57008fbb434d947087a29db45aa2e6c13ea0e43026db24"
+    },
+    {
+      "source": "/tmp/303-identity-core-build.log",
+      "artifact": "303-identity-core-build.log.gz",
+      "rawBytes": 114,
+      "rawSha256": "077151656389dc541e8cddc04267ac0a27ac2a9a85564060170c1ff23db41b4f",
+      "gzipSha256": "6547967d7b7550e5be242a1b79f2525d8beca1af98e19995fe973c8e9be22632"
+    },
+    {
+      "source": "/tmp/303-identity-cwd-red.log",
+      "artifact": "303-identity-cwd-red.log.gz",
+      "rawBytes": 1465,
+      "rawSha256": "17b1edf20e008223e7264ec7e479203f28fe37d847d114a48eb76d15a4e258a4",
+      "gzipSha256": "5c182aaaed7500177581721b1b89a44e6f605255b98310abdf3d586ef6e9869c"
+    },
+    {
+      "source": "/tmp/303-identity-engine-build.log",
+      "artifact": "303-identity-engine-build.log.gz",
+      "rawBytes": 118,
+      "rawSha256": "db6af909bcae3c3f211e43b5c9000a9a9fbdc4e419925c4880f6fbdfec201c76",
+      "gzipSha256": "a820971784bcc422a507ffb3304b5be9dff7917c6b6cf3dcb1274a4d3b2d24ca"
+    },
+    {
+      "source": "/tmp/303-identity-engine-green.log",
+      "artifact": "303-identity-engine-green.log.gz",
+      "rawBytes": 261,
+      "rawSha256": "f44a1a50b9987c98476ed081bd985e1de74db1acfec07bb8f903d54e6cc506a5",
+      "gzipSha256": "035ae4364565dc8895d5919940e1e4e4edf4d5449cb47ead33aacaffea5c8d4d"
+    },
+    {
+      "source": "/tmp/303-identity-final-engine.log",
+      "artifact": "303-identity-final-engine.log.gz",
+      "rawBytes": 262,
+      "rawSha256": "f8d55c7b4e5445a8b723076ef5d83bfaa7594a81e18532f6e08f154c962ad9c0",
+      "gzipSha256": "fdc1ec1f0f49067500bd3f781fe007c25642671ef1a02adb583fd33459e4970f"
+    },
+    {
+      "source": "/tmp/303-identity-final-pg.log",
+      "artifact": "303-identity-final-pg.log.gz",
+      "rawBytes": 1042,
+      "rawSha256": "ef5f82e1937b9435832aa0e1268404114d3f89f8884ba2015b70949444fe3d19",
+      "gzipSha256": "a4df9d1779e27024320b8a12c53cb0d0e8d7d4b40a9706672faaf46c86382ccb"
+    },
+    {
+      "source": "/tmp/303-identity-install.log",
+      "artifact": "303-identity-install.log.gz",
+      "rawBytes": 1071,
+      "rawSha256": "b0d22dc09f76d85f1addd5cbf67607bcd9295e95e5ad3e303d88169981a1b665",
+      "gzipSha256": "727873d596a9a916cd6a492576b6a21ac2373b543c8720bf487c5f1852079081"
+    },
+    {
+      "source": "/tmp/303-identity-ledger-test.log",
+      "artifact": "303-identity-ledger-test.log.gz",
+      "rawBytes": 252,
+      "rawSha256": "2aa68039b2cae7fdf5e2e4d6a716d2d70afbe68d7a78eaedf190568249dc1bf1",
+      "gzipSha256": "79bb386c24ed02e0b050dad1966f64de32865b9fc1fc23f87876892848635eb6"
+    },
+    {
+      "source": "/tmp/303-identity-lint.log",
+      "artifact": "303-identity-lint.log.gz",
+      "rawBytes": 0,
+      "rawSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "source": "/tmp/303-identity-partial-red.log",
+      "artifact": "303-identity-partial-red.log.gz",
+      "rawBytes": 1644,
+      "rawSha256": "26fdf53f9f94203158d22e3b915ff8bd0b4f15949af6891df9075284c78cc965",
+      "gzipSha256": "aa2c60160f8b93c9d28360fc4be1e83b9a4435c350f3821f0d16cd8482d92fa0"
+    },
+    {
+      "source": "/tmp/303-identity-pg-green.log",
+      "artifact": "303-identity-pg-green.log.gz",
+      "rawBytes": 1037,
+      "rawSha256": "79ec06c9b4d2ed988949c1ff577e2be076dad132e30e41780e8caae194b1ad6c",
+      "gzipSha256": "70392a9eda1132ca304a9cc0a6c9b08a35c195fb5ebad7bcd70c1be567fa52ba"
+    },
+    {
+      "source": "/tmp/303-identity-pg-red.log",
+      "artifact": "303-identity-pg-red.log.gz",
+      "rawBytes": 9350,
+      "rawSha256": "70a0b2f57efef2f09fce9165abdd1f183d5794db109f91cdcda1ce2434056b68",
+      "gzipSha256": "9b2d2fe75dbf67e85b2ffb2df1b7f1ad4a0564cd4a0f62906bf0cd53003692af"
+    },
+    {
+      "source": "/tmp/303-identity-pg-red2.log",
+      "artifact": "303-identity-pg-red2.log.gz",
+      "rawBytes": 10222,
+      "rawSha256": "12a99e222f3a24daf93380c33a7ea5246b0b92c475e833ed76053bd57fed4e38",
+      "gzipSha256": "c4bd17c3fb27fd6f8a9103b5c8c0ece0ff1dc8de43e096961cf4bc6e92db9d96"
+    },
+    {
+      "source": "/tmp/303-identity-red.log",
+      "artifact": "303-identity-red.log.gz",
+      "rawBytes": 4387,
+      "rawSha256": "bc6a83e2e863a1db22641378d3522b47ee58a7151c4a74ed9bedecba0859feb3",
+      "gzipSha256": "cc5c147582946593e2da35e470b839a4dbc493193032e19fce07bc53e31b6189"
+    },
+    {
+      "source": "/tmp/303-identity-pg-run.mjs",
+      "artifact": "303-identity-pg-run.mjs",
+      "rawBytes": 1351,
+      "rawSha256": "f5dc631e0debd21959634c681a8fc217d6c4794a903134b5ff47639e87de97f7"
+    },
+    {
+      "source": "/tmp/303-identity-evidence-core-build.log",
+      "artifact": "303-identity-evidence-core-build.log.gz",
+      "rawBytes": 114,
+      "rawSha256": "077151656389dc541e8cddc04267ac0a27ac2a9a85564060170c1ff23db41b4f",
+      "gzipSha256": "6547967d7b7550e5be242a1b79f2525d8beca1af98e19995fe973c8e9be22632"
+    },
+    {
+      "source": "/tmp/303-identity-evidence-engine-build.log",
+      "artifact": "303-identity-evidence-engine-build.log.gz",
+      "rawBytes": 118,
+      "rawSha256": "db6af909bcae3c3f211e43b5c9000a9a9fbdc4e419925c4880f6fbdfec201c76",
+      "gzipSha256": "a820971784bcc422a507ffb3304b5be9dff7917c6b6cf3dcb1274a4d3b2d24ca"
+    }
+  ]
+}

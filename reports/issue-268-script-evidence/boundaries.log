@@ -1,0 +1,21 @@
+
+ RUN  v4.1.10 /Users/man/worktrees/Fusion/268-script-evidence/packages/engine
+
+stderr | src/__tests__/workflow-script-evidence.test.ts > named script evidence > retains actual harmless command stdout and stderr with exit evidence
+<NUL>fnlvl=info<NUL>[executor] FN-script-evidence: workflow step 'Assertions' executing script 'assertions': printf 'ASSERTIONS_PASS\n'; printf 'diagnostic\n' >&2
+
+stderr | src/__tests__/workflow-script-evidence.test.ts > named script evidence > bounds each successful output stream
+<NUL>fnlvl=info<NUL>[executor] FN-script-evidence: workflow step 'Assertions' executing script 'assertions': unused
+
+stderr | src/__tests__/workflow-script-evidence.test.ts > script evidence failure and ownership boundaries > projects actual failing command diagnostics through the native custom-node adapter
+<NUL>fnlvl=info<NUL>[executor] FN-script-evidence: workflow step 'assertions' executing script 'assertions': printf 'ASSERTION_FAILED\n' >&2; exit 7
+
+stderr | src/__tests__/workflow-script-evidence.test.ts > script evidence failure and ownership boundaries > native script cancellation cannot become a successful receipt
+<NUL>fnlvl=info<NUL>[executor] FN-script-evidence: workflow step 'Assertions' executing script 'assertions': unused
+
+···········
+
+ Test Files  1 passed (1)
+      Tests  11 passed (11)
+   Start at  01:56:10
+   Duration  5.15s (transform 3.02s, setup 95ms, import 4.91s, tests 27ms, environment 0ms)

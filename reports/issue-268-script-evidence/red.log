@@ -1,0 +1,97 @@
+
+ RUN  v4.1.10 /Users/man/worktrees/Fusion/268-script-evidence/packages/engine
+
+stderr | src/__tests__/workflow-script-evidence.test.ts > named script evidence > retains actual harmless command stdout and stderr with exit evidence
+<NUL>fnlvl=info<NUL>[executor] FN-script-evidence: workflow step 'Assertions' executing script 'assertions': printf 'ASSERTIONS_PASS\n'; printf 'diagnostic\n' >&2
+
+stderr | src/__tests__/workflow-script-evidence.test.ts > named script evidence > bounds each successful output stream
+<NUL>fnlvl=info<NUL>[executor] FN-script-evidence: workflow step 'Assertions' executing script 'assertions': unused
+
+xxxx
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |engine-default| src/__tests__/workflow-script-evidence.test.ts > named script evidence > retains actual harmless command stdout and stderr with exit evidence
+AssertionError: expected 'Script \'assertions\' completed succe…' to contain 'ASSERTIONS_PASS'
+
+Expected: "ASSERTIONS_PASS"
+Received: "Script 'assertions' completed successfully"
+
+ ❯ src/__tests__/workflow-script-evidence.test.ts:33:27
+     31|     });
+     32|     expect(result.success).toBe(true);
+     33|     expect(result.output).toContain("ASSERTIONS_PASS");
+       |                           ^
+     34|     expect(result.output).toContain("diagnostic");
+     35|     expect(result.output).toContain("Exit code: 0");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  |engine-default| src/__tests__/workflow-script-evidence.test.ts > named script evidence > bounds each successful output stream
+AssertionError: expected 'Script \'assertions\' completed succe…' to contain 'TAIL'
+
+Expected: "TAIL"
+Received: "Script 'assertions' completed successfully"
+
+ ❯ src/__tests__/workflow-script-evidence.test.ts:41:27
+     39|     deps.runConfiguredCommand = vi.fn(async () => ({ stdout: "x".repea…
+     40|     const result = await executeScriptWorkflowStep(deps, task, step, p…
+     41|     expect(result.output).toContain("TAIL");
+       |                           ^
+     42|     expect(result.output).toContain("ERRTAIL");
+     43|     expect(result.output!.length).toBeLessThan(8500);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  |engine-default| src/__tests__/workflow-script-evidence.test.ts > named script evidence > records ordinary scripts with concrete identities (foreach=false)
+AssertionError: expected [] to deeply equal [ 'assertions' ]
+
+- Expected
++ Received
+
+- [
+-   "assertions",
+- ]
++ []
+
+ ❯ src/__tests__/workflow-script-evidence.test.ts:55:61
+     53|     await executor.run(task, { experimentalFeatures: { workflowGraphEx…
+     54|     const finished = records.filter((record) => record.status === "pas…
+     55|     expect(finished.map((record) => record.workflowStepId)).toEqual(fo…
+       |                                                             ^
+     56|     expect(finished.every((record) => record.source === "node" && reco…
+     57|     expect(logs.filter((line) => line.includes("ASSERTIONS_PASS"))).to…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  |engine-default| src/__tests__/workflow-script-evidence.test.ts > named script evidence > records ordinary scripts with concrete identities (foreach=true)
+AssertionError: expected [] to deeply equal [ 'steps#0:assertions', …(1) ]
+
+- Expected
++ Received
+
+- [
+-   "steps#0:assertions",
+-   "steps#1:assertions",
+- ]
++ []
+
+ ❯ src/__tests__/workflow-script-evidence.test.ts:55:61
+     53|     await executor.run(task, { experimentalFeatures: { workflowGraphEx…
+     54|     const finished = records.filter((record) => record.status === "pas…
+     55|     expect(finished.map((record) => record.workflowStepId)).toEqual(fo…
+       |                                                             ^
+     56|     expect(finished.every((record) => record.source === "node" && reco…
+     57|     expect(logs.filter((line) => line.includes("ASSERTIONS_PASS"))).to…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  01:53:59
+   Duration  4.98s (transform 2.57s, setup 74ms, import 4.77s, tests 20ms, environment 0ms)
+
+undefined
+/Users/man/worktrees/Fusion/268-script-evidence/packages/engine:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/__tests__/workflow-script-evidence.test.ts --reporter=dot

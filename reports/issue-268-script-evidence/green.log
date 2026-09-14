@@ -1,0 +1,42 @@
+
+ RUN  v4.1.10 /Users/man/worktrees/Fusion/268-script-evidence/packages/engine
+
+stderr | src/__tests__/workflow-script-evidence.test.ts > named script evidence > retains actual harmless command stdout and stderr with exit evidence
+<NUL>fnlvl=info<NUL>[executor] FN-script-evidence: workflow step 'Assertions' executing script 'assertions': printf 'ASSERTIONS_PASS\n'; printf 'diagnostic\n' >&2
+
+stderr | src/__tests__/workflow-script-evidence.test.ts > named script evidence > bounds each successful output stream
+<NUL>fnlvl=info<NUL>[executor] FN-script-evidence: workflow step 'Assertions' executing script 'assertions': unused
+
+···x
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |engine-default| src/__tests__/workflow-script-evidence.test.ts > named script evidence > records ordinary scripts with concrete identities (foreach=true)
+ReferenceError: FOREACH_ACTIVE_CONTEXT_KEY is not defined
+ ❯ WorkflowGraphExecutor.executeMaterializedTemplateNode src/workflows/workflow-graph-executor.ts:2147:20
+    2145|        */
+    2146|       const recordScript = node.kind === "script"
+    2147|         && context[FOREACH_ACTIVE_CONTEXT_KEY] !== undefined
+       |                    ^
+    2148|         && context[WORKFLOW_OPTIONAL_GROUP_CONTEXT_KEY] === undefined;
+    2149|       return await this.executeNodeWithRetries(node, task, settings, c…
+ ❯ Object.runTemplateNode src/workflows/workflow-graph-executor.ts:985:20
+ ❯ runInstance src/workflows/workflow-graph-foreach.ts:1021:21
+ ❯ runForeach src/workflows/workflow-graph-foreach.ts:475:28
+ ❯ runNodeAndTraverse src/workflows/workflow-graph-executor.ts:978:33
+ ❯ walk src/workflows/workflow-graph-executor.ts:1630:27
+ ❯ traverseChildren src/workflows/workflow-graph-executor.ts:1809:23
+ ❯ runNodeAndTraverse src/workflows/workflow-graph-executor.ts:886:18
+ ❯ walk src/workflows/workflow-graph-executor.ts:1630:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+   Start at  01:54:51
+   Duration  4.93s (transform 2.85s, setup 102ms, import 4.68s, tests 22ms, environment 0ms)
+
+undefined
+/Users/man/worktrees/Fusion/268-script-evidence/packages/engine:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/__tests__/workflow-script-evidence.test.ts --reporter=dot

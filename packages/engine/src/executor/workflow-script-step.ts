@@ -72,7 +72,14 @@ export async function executeScriptWorkflowStep(
     if (scriptResult.spawnError || scriptResult.timedOut || scriptResult.exitCode !== 0) {
       return { success: false, error: configuredCommandErrorMessage(scriptResult) };
     }
-    return { success: true, output: `Script '${scriptName}' completed successfully` };
+    /* FNXC:WorkflowScriptEvidence 2026-09-14-05:54:
+     * Preserve bounded command evidence on success; a generic sentence loses the actual assertions.
+     * Each stream uses the existing workflow output bound, without changing exit-code verdicts.
+     */
+    const evidence = [`Script '${scriptName}' completed successfully`, "Exit code: 0"];
+    if (scriptResult.stdout.trim()) evidence.push(`stdout: ${truncateWorkflowScriptOutput(scriptResult.stdout.trim())}`);
+    if (scriptResult.stderr.trim()) evidence.push(`stderr: ${truncateWorkflowScriptOutput(scriptResult.stderr.trim())}`);
+    return { success: true, output: evidence.join("\n") };
   } catch (err: unknown) {
     if (err instanceof Error && err.name === "AbortError") {
       throw err;

@@ -1,0 +1,59 @@
+[
+  {
+    "attempt": 1,
+    "sessionId": "cf375677-b0d2-4dbe-b870-1ed2fa979834",
+    "stopReason": "cancelled",
+    "text": "The rest of the frozen source was truncated from this message. I\u2019ll read only those remaining lines so the review can stay exact-source and still cover the omitted executor file.",
+    "usage": {
+      "input_tokens": 44470,
+      "cache_read_input_tokens": 1280,
+      "cache_creation_input_tokens": 0,
+      "output_tokens": 773,
+      "reasoning_tokens": 496,
+      "total_tokens": 46523
+    },
+    "modelUsage": {
+      "grok-4.6-build": {
+        "inputTokens": 44470,
+        "outputTokens": 773,
+        "cacheReadInputTokens": 1280,
+        "cacheCreationInputTokens": 0,
+        "modelCalls": 1,
+        "costUSD": 0.03203412
+      }
+    },
+    "reportedCostUSD": 0.03203412
+  },
+  {
+    "attempt": 2,
+    "sessionId": "34b6af95-6b12-425b-9419-d489df3a126f",
+    "stopReason": "cancelled",
+    "text": "The review packet was truncated; I\u2019ll read only the omitted remainder of the supplied source, then give a PASS/FIX verdict from that packet alone.",
+    "usage": {
+      "input_tokens": 43702,
+      "cache_read_input_tokens": 1280,
+      "cache_creation_input_tokens": 0,
+      "output_tokens": 536,
+      "reasoning_tokens": 423,
+      "total_tokens": 45518
+    },
+    "modelUsage": {
+      "grok-4.6-build": {
+        "inputTokens": 43702,
+        "outputTokens": 536,
+        "cacheReadInputTokens": 1280,
+        "cacheCreationInputTokens": 0,
+        "modelCalls": 1,
+        "costUSD": 0.0310284
+      }
+    },
+    "reportedCostUSD": 0.0310284
+  },
+  {
+    "attempt": 3,
+    "sessionId": "b7c7ab39-1a6c-4d38-a5b8-2e32b0edb904",
+    "result": "240s timeout; no matching owned process after timeout; native grok usage reports no usage recorded",
+    "usage": "unknown",
+    "verdict": "none"
+  }
+]

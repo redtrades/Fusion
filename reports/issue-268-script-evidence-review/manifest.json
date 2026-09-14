@@ -1,0 +1,8 @@
+{
+  "packages/engine/src/executor/workflow-script-step.ts": "15f177b27566696a1abed87f0f03ac1aab222bcd5b5b3d132d4acdc220f02e29",
+  "packages/engine/src/executor/run-graph-custom-node.ts": "276431aa6c075b4236b34262843ac756b8260b441ab76a1c5a88f2451a726c84",
+  "packages/engine/src/workflows/workflow-graph-executor.ts": "e8c3803a231d963d7c9feae26585e0dcb6fd4824d6a9e76b089649232e14bd4b",
+  "packages/engine/src/__tests__/workflow-script-evidence.test.ts": "672d293b27280c4db1e2cd45d5f8a8847500f2ad9b92d12cfc12ad7c352a9455",
+  "reports/issue-268-script-evidence/HANDOFF.md": "9cbfda55878cec98b38cffbbdcc65377f0b09be0b7e40014cfa261cc3413d37e",
+  "reports/issue-268-script-evidence/PLAN.md": "c34577a9be947a6de0b3aa52048e384337f72cdac7384f44dcfe0e28fa977ced"
+}

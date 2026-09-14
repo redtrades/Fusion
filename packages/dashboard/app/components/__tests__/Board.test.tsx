@@ -53,6 +53,7 @@ vi.mock("../Column", () => ({
     column,
     tasks,
     columnDisplayName,
+    allTasks,
     collapsed,
     onToggleCollapse,
     onQuickCreate,
@@ -82,6 +83,7 @@ vi.mock("../Column", () => ({
     column: string;
     tasks: Task[];
     columnDisplayName?: string;
+    allTasks?: Task[];
     collapsed?: boolean;
     onToggleCollapse?: () => void;
     onQuickCreate?: unknown;
@@ -110,7 +112,7 @@ vi.mock("../Column", () => ({
   }) => {
     columnRenderCounts[column] = (columnRenderCounts[column] ?? 0) + 1;
     return (
-      <div data-testid={`column-${column}`} data-tasks={JSON.stringify(tasks)} data-workflow-badges={JSON.stringify(Object.fromEntries(taskWorkflowBadges ?? new Map()))} data-collapsed={collapsed ? "true" : "false"} data-has-quick-create={onQuickCreate ? "yes" : "no"} data-has-new-task={onNewTask ? "yes" : "no"} data-has-auto-merge-toggle={onToggleAutoMerge ? "yes" : "no"} data-has-plan-auto-approve-toggle={onTogglePlanAutoApprove ? "yes" : "no"} data-plan-auto-approve-enabled={planAutoApproveEnabled ? "true" : "false"} data-has-archive-all={onArchiveAllDone ? "yes" : "no"} data-favorite-providers={JSON.stringify(favoriteProviders ?? [])} data-favorite-models={JSON.stringify(favoriteModels ?? [])} data-has-toggle-favorite={onToggleFavorite ? "yes" : "no"} data-has-toggle-model-favorite={onToggleModelFavorite ? "yes" : "no"} data-is-search-active={isSearchActive ? "true" : "false"} data-done-sort-mode={doneSortMode ?? ""} data-has-done-sort-handler={onDoneSortModeChange ? "yes" : "no"} data-workflow-id={workflowId ?? ""} data-workflow-options={JSON.stringify((workflowOptions ?? []).map((workflow) => workflow.id))} data-default-workflow-id={defaultWorkflowId ?? ""} data-column-display-name={columnDisplayName ?? ""} data-has-can-drop={canDropTask ? "yes" : "no"} data-has-planning={onPlanningMode ? "yes" : "no"}>
+      <div data-testid={`column-${column}`} data-tasks={JSON.stringify(tasks)} data-workflow-badges={JSON.stringify(Object.fromEntries(taskWorkflowBadges ?? new Map()))} data-collapsed={collapsed ? "true" : "false"} data-has-quick-create={onQuickCreate ? "yes" : "no"} data-has-new-task={onNewTask ? "yes" : "no"} data-has-auto-merge-toggle={onToggleAutoMerge ? "yes" : "no"} data-has-plan-auto-approve-toggle={onTogglePlanAutoApprove ? "yes" : "no"} data-plan-auto-approve-enabled={planAutoApproveEnabled ? "true" : "false"} data-has-archive-all={onArchiveAllDone ? "yes" : "no"} data-favorite-providers={JSON.stringify(favoriteProviders ?? [])} data-favorite-models={JSON.stringify(favoriteModels ?? [])} data-has-toggle-favorite={onToggleFavorite ? "yes" : "no"} data-has-toggle-model-favorite={onToggleModelFavorite ? "yes" : "no"} data-is-search-active={isSearchActive ? "true" : "false"} data-done-sort-mode={doneSortMode ?? ""} data-has-done-sort-handler={onDoneSortModeChange ? "yes" : "no"} data-workflow-id={workflowId ?? ""} data-workflow-options={JSON.stringify((workflowOptions ?? []).map((workflow) => workflow.id))} data-default-workflow-id={defaultWorkflowId ?? ""} data-native-wip-count={(allTasks ?? tasks).filter(task => task.column === "in-progress").length} data-column-display-name={columnDisplayName ?? ""} data-has-can-drop={canDropTask ? "yes" : "no"} data-has-planning={onPlanningMode ? "yes" : "no"}>
         {onQuickCreate ? (
           <button type="button" data-testid={`mock-quick-create-${column}`} onClick={() => void (onQuickCreate as (input: { description: string; column?: string; workflowId?: string }) => Promise<unknown>)({ description: `Create from ${column}`, column, workflowId: "wf-custom" })}>
             quick-create-{column}
@@ -2393,5 +2395,55 @@ describe("Board", () => {
       await selectWorkflow("wf-preserved");
       await waitFor(() => expect(JSON.parse(screen.getByTestId("column-todo").getAttribute("data-tasks") || "[]").map((task: Task) => task.id)).toEqual(["FN-1"]));
     });
+  });
+});
+
+
+describe("current terminal display lanes", () => {
+  it("preserves the real executing predicate and Up Next ceiling when paused WIP is projected", async () => {
+    const { isRunningAgentTask, enrichRunningAgentTaskShapeFromFlags } = await import("../../../../core/src/agents/live-agent-count");
+    const { groupByWorktree } = await import("../../utils/worktreeGrouping");
+    const { terminalDisplayKind } = await import("../../utils/boardTerminalProjection");
+    const held = { id: "HELD", column: "in-progress", paused: true, status: "paused", dependencies: [], updatedAt: "2026-09-14T00:00:00Z", terminalDisplay: { kind: "blocked", reason: "missing-input", resumeActor: "orchestrator", originColumn: "in-progress", anchorId: "a", runId: "r", taskRevision: "2026-09-14T00:00:00Z" } } as Task;
+    const running = { id: "RUNNING", column: "in-progress", status: "running", dependencies: [] } as Task;
+    const queue = ["Q1", "Q2"].map(id => ({ id, column: "todo", dependencies: [] } as unknown as Task));
+    const allTasks = [held, running, ...queue];
+    const nativeWip = allTasks.filter(task => task.column === "in-progress");
+    const displayedWip = nativeWip.filter(task => !terminalDisplayKind(task));
+    const executing = (tasks: Task[]) => tasks.filter(task => isRunningAgentTask(enrichRunningAgentTaskShapeFromFlags(task, { countsTowardWip: true }))).length;
+    expect(executing([held])).toBe(0);
+    expect(executing(nativeWip)).toBe(1);
+    expect(executing(displayedWip)).toBe(1);
+    expect(nativeWip).toHaveLength(2); expect(displayedWip).toHaveLength(1);
+    for (const visible of [nativeWip, displayedWip]) {
+      expect(groupByWorktree(visible, allTasks, 1).find(group => group.id === "up-next")?.queuedTasks.map(task => task.id)).toEqual(["Q1"]);
+    }
+    expect(allTasks[0]).toBe(held);
+    expect(allTasks[0].column).toBe("in-progress");
+  });
+  it.each([false, true])("keeps phase and original identity in read-only terminal lanes (aggregate=%s)", async (aggregate) => {
+    const task = { id: "FN-HELD", title: "Await input", description: "d", column: "in-progress", paused: true, status: "paused", updatedAt: "2026-09-14T00:00:00Z", dependencies: [], steps: [], log: [], currentStep: 0,
+      terminalDisplay: { kind: "blocked", reason: "missing-input", resumeActor: "orchestrator", originColumn: "in-progress", anchorId: "held-1", runId: "graph-1", taskRevision: "2026-09-14T00:00:00Z" } } as Task;
+    const review = { ...task, id: "FN-REVIEW-HELD", title: "Review inconclusive", column: "in-review", terminalDisplay: { ...task.terminalDisplay!, kind: "escalated", reason: "validation-inconclusive", resumeActor: "human", originColumn: "in-review" } } as Task;
+    const onOpenDetail = vi.fn(); const onMoveTask = vi.fn();
+    const { rerender } = renderBoard({ tasks: [task, review], onOpenDetail, onMoveTask });
+    if (aggregate) await selectWorkflow(ALL_WORKFLOWS_BOARD_VIEW_ID);
+    const blocked = await screen.findByRole("region", { name: "Blocked" });
+    const escalated = screen.getByRole("region", { name: "Escalated" });
+    expect(blocked.textContent).toContain("in-progress");
+    expect(blocked.textContent).toContain("missing-input");
+    expect(blocked.textContent).toContain("orchestrator");
+    expect(blocked.textContent).toContain("Paused");
+    expect(escalated.textContent).toContain("in-review");
+    expect(escalated.textContent).toContain("human");
+    expect(within(blocked).getAllByRole("button")).toHaveLength(1);
+    fireEvent.click(within(blocked).getByRole("button", { name: /Open/ }));
+    expect(onOpenDetail.mock.calls[0][0]).toBe(task);
+    expect(onMoveTask).not.toHaveBeenCalled();
+    expect(task.column).toBe("in-progress");
+    expect(screen.getByTestId("column-in-progress").getAttribute("data-native-wip-count")).toBe("1");
+    expect(screen.getByTestId("column-in-progress").textContent).not.toContain("FN-HELD");
+    rerender(<Board {...createBoardProps({ tasks: [{ ...task, paused: false, status: "queued", updatedAt: "2026-09-14T01:00:00Z" }], onOpenDetail, onMoveTask })} />);
+    expect(screen.queryByRole("region", { name: "Blocked" })).toBeNull();
   });
 });

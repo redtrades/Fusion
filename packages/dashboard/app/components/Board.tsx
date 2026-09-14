@@ -1,3 +1,5 @@
+import { terminalDisplayGroups, terminalDisplayKind } from "../utils/boardTerminalProjection";
+import { TerminalDisplayColumn } from "./TerminalDisplayColumn";
 import { sortTasksForDisplayColumn, type TaskColumnSortMode, type Task, type TaskDetail, type Column as ColumnType, type ColumnId, type TaskCreateInput, type GithubIssueAction, type MergeResult } from "@fusion/core";
 import { Column } from "./Column";
 import "./Lane.css";
@@ -690,6 +692,7 @@ export function Board({ tasks, projectId, maxConcurrent, effectiveMaxConcurrent 
     */
     const seenRevertedTaskIds = new Set<string>();
     for (const task of selectedWorkflowTasks) {
+      if (terminalDisplayKind(task)) continue;
       if (isTaskReverted(task.sourceMetadata)) {
         if (seenRevertedTaskIds.has(task.id)) continue;
         seenRevertedTaskIds.add(task.id);
@@ -855,6 +858,7 @@ export function Board({ tasks, projectId, maxConcurrent, effectiveMaxConcurrent 
     */
     const seenRevertedTaskIds = new Set<string>();
     for (const task of tasks) {
+      if (terminalDisplayKind(task)) continue;
       if (isTaskReverted(task.sourceMetadata)) {
         if (seenRevertedTaskIds.has(task.id)) continue;
         seenRevertedTaskIds.add(task.id);
@@ -1035,6 +1039,7 @@ export function Board({ tasks, projectId, maxConcurrent, effectiveMaxConcurrent 
                 />
               );
             })}
+            {terminalDisplayGroups(tasks).map(group => <TerminalDisplayColumn key={`terminal-display:${group.kind}`} {...group} onOpenDetail={onOpenDetail} />)}
           </main>
         </div>
       );
@@ -1114,6 +1119,7 @@ export function Board({ tasks, projectId, maxConcurrent, effectiveMaxConcurrent 
               />
             );
           })}
+          {terminalDisplayGroups(selectedWorkflowTasks).map(group => <TerminalDisplayColumn key={`terminal-display:${group.kind}`} {...group} onOpenDetail={onOpenDetail} />)}
           {selectedWorkflowArchivedColumn && (
             <Column
               key={selectedWorkflowArchivedColumn.id}

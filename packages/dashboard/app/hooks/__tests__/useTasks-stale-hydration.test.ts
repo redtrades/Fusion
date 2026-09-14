@@ -36,8 +36,12 @@ class MockEventSource {
     this.url = url;
     MockEventSource.instances.push(this);
   }
-  addEventListener(): void {}
-  removeEventListener(): void {}
+  listeners = new Map<string, Set<EventListener>>();
+  addEventListener(type: string, callback: EventListener): void {
+    const listeners = this.listeners.get(type) ?? new Set(); listeners.add(callback); this.listeners.set(type, listeners);
+  }
+  removeEventListener(type: string, callback: EventListener): void { this.listeners.get(type)?.delete(callback); }
+  emit(type: string, task: Task): void { for (const listener of this.listeners.get(type) ?? []) listener(new MessageEvent(type, { data: JSON.stringify(task) })); }
 }
 
 const originalEventSource = globalThis.EventSource;
@@ -255,5 +259,54 @@ describe("useTasks in-app view re-entry freshness", () => {
     await waitFor(() => {
       expect(result.current.tasks.map((task) => task.id)).toEqual(["FN-B"]);
     });
+  });
+});
+
+
+describe("terminal display snapshot authority", () => {
+  it("refreshes canonical terminal evidence after a paused SSE event without trusting its summary", async () => {
+    mockFetchTasks.mockResolvedValue([createTask()]);
+    const { result } = renderHook(() => useTasks({ projectId: PROJECT_ID }));
+    await waitFor(() => expect(result.current.tasks).toHaveLength(1));
+    const paused = createTask({ paused: true, status: "paused", updatedAt: "2026-09-14T00:00:00Z", terminalDisplay: { kind: "blocked", reason: "missing-input", resumeActor: "orchestrator", originColumn: "todo", anchorId: "new", runId: "run", taskRevision: "2026-09-14T00:00:00Z" } });
+    let complete!: (tasks: Task[]) => void;
+    mockFetchTasks.mockReturnValue(new Promise<Task[]>(resolve => { complete = resolve; }));
+    const previousCalls = mockFetchTasks.mock.calls.length;
+    act(() => MockEventSource.instances.at(-1)!.emit("task:updated", paused));
+    expect(result.current.tasks[0].terminalDisplay).toBeUndefined();
+    await waitFor(() => expect(mockFetchTasks.mock.calls.length).toBe(previousCalls + 1));
+    await act(async () => complete([paused]));
+    expect(result.current.tasks[0].terminalDisplay?.anchorId).toBe("new");
+  });
+  it("does not run a queued terminal refresh after unmount", async () => {
+    mockFetchTasks.mockResolvedValue([createTask()]);
+    const { result, unmount } = renderHook(() => useTasks({ projectId: PROJECT_ID }));
+    await waitFor(() => expect(result.current.tasks).toHaveLength(1));
+    let complete!: (tasks: Task[]) => void;
+    mockFetchTasks.mockReturnValue(new Promise<Task[]>(resolve => { complete = resolve; }));
+    const paused = createTask({ paused: true, status: "paused" });
+    act(() => { MockEventSource.instances.at(-1)!.emit("task:updated", paused); MockEventSource.instances.at(-1)!.emit("task:updated", paused); });
+    const calls = mockFetchTasks.mock.calls.length;
+    unmount();
+    await act(async () => complete([paused]));
+    expect(mockFetchTasks.mock.calls.length).toBe(calls);
+  });
+  it("never restores held-anchor authority from persisted browser cache", () => {
+    const task = createTask({ paused: true, status: "paused", terminalDisplay: { kind: "blocked", reason: "missing-input", resumeActor: "orchestrator", originColumn: "todo", anchorId: "old", runId: "run", taskRevision: "2026-07-26T09:00:00.000Z" } });
+    seedSnapshot([task], FIVE_MINUTES_MS);
+    mockFetchTasks.mockReturnValue(new Promise<Task[]>(() => {}));
+    const { result } = renderHook(() => useTasks({ projectId: PROJECT_ID }));
+    expect(result.current.tasks[0].paused).toBe(true);
+    expect(result.current.tasks[0].terminalDisplay).toBeUndefined();
+  });
+  it("clears full omission and Reset, and refuses a delayed terminal snapshot", async () => {
+    const { mergeTaskSnapshot } = await import("../useTasks");
+    const held = { id: "held", column: "in-review", paused: true, status: "paused", updatedAt: "2026-09-14T00:00:00Z", terminalDisplay: { kind: "escalated", reason: "validation-inconclusive", resumeActor: "human", originColumn: "in-review", anchorId: "anchor", runId: "run", taskRevision: "2026-09-14T00:00:00Z" } } as Task;
+    const { terminalDisplay: _display, ...without } = held;
+    expect(mergeTaskSnapshot(held, without as Task, { fullSnapshot: true }).terminalDisplay).toBeUndefined();
+    expect(mergeTaskSnapshot(held, without as Task, { authoritativeLifecycle: true }).terminalDisplay).toBeUndefined();
+    const reset = mergeTaskSnapshot(held, { ...without, paused: false, status: "queued", updatedAt: "2026-09-14T01:00:00Z" } as Task, { fullSnapshot: true });
+    expect(reset.terminalDisplay).toBeUndefined();
+    expect(mergeTaskSnapshot(reset, held, { fullSnapshot: true }).terminalDisplay).toBeUndefined();
   });
 });

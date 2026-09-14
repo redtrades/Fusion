@@ -58,8 +58,8 @@ const TASK_CACHE_ROW_LIMITS = [500, 250, 100, 50] as const;
 
 function toCachedTaskRow(task: Task): Task {
   const log = (task as Task & { log?: unknown }).log;
-  if ((!Array.isArray(log) || log.length === 0) && task.releaseGate === undefined) return task;
-  const { log: _droppedLog, releaseGate: _transientReleaseGate, ...rest } = task as Task & { log?: unknown };
+  if ((!Array.isArray(log) || log.length === 0) && task.releaseGate === undefined && task.terminalDisplay === undefined) return task;
+  const { log: _droppedLog, releaseGate: _transientReleaseGate, terminalDisplay: _terminalDisplay, ...rest } = task as Task & { log?: unknown };
   /*
   FNXC:PromoteVisibility 2026-08-11-21:06:
   A cached release verdict has no hook-local evidence provenance and may already be expired. Persist
@@ -109,15 +109,16 @@ FNXC:PromoteVisibility 2026-08-13-22:23:
 Only GET /api/tasks pairs a release verdict with the complete hold-lane evidence used to evaluate it.
 SSE is a store-derived lifecycle channel, so remove any verdict defensively before every SSE path,
 including reconnect-gap upserts; a producer regression must resolve to the conservative fallback.
+FNXC:TerminalBoard 2026-09-14-04:18: Held-anchor summaries likewise require a canonical read and must not survive persisted-cache restore or SSE ingestion.
 */
-function stripTransientReleaseGate(task: Task): Task {
-  if (!Object.prototype.hasOwnProperty.call(task, "releaseGate")) return task;
-  const { releaseGate: _transientReleaseGate, ...taskWithoutReleaseGate } = task;
+function stripTransientBoardEvidence(task: Task): Task {
+  if (!Object.prototype.hasOwnProperty.call(task, "releaseGate") && !task.terminalDisplay) return task;
+  const { releaseGate: _transientReleaseGate, terminalDisplay: _terminalDisplay, ...taskWithoutReleaseGate } = task;
   return taskWithoutReleaseGate as Task;
 }
 
 function normalizeNonBoardTask(task: Task): Task {
-  return normalizeTask(stripTransientReleaseGate(task));
+  return normalizeTask(stripTransientBoardEvidence(task));
 }
 
 function isSoftDeleted(task: Task): boolean {
@@ -418,6 +419,13 @@ export function mergeTaskSnapshot<T extends Task>(
   merged.columnMovedAt = columnMovedAtCompare > 0 ? incoming.columnMovedAt : current.columnMovedAt;
   merged.status = incomingUpdatesStatus ? incoming.status : current.status;
   merged.updatedAt = updatedAtCompare > 0 ? incoming.updatedAt : current.updatedAt;
+  // FNXC:TerminalBoard 2026-09-14-04:18: Every accepted lifecycle event invalidates held-anchor evidence; only an equal/newer canonical snapshot can restore it. Never resurrect it from an older GET after Reset.
+  if (updatedAtCompare >= 0) {
+    const display = options.fullSnapshot ? incoming.terminalDisplay : undefined;
+    merged.terminalDisplay = display && display.taskRevision === merged.updatedAt && display.originColumn === merged.column
+      && merged.paused === true && merged.status === "paused" ? display : undefined;
+  }
+
   merged.awaitingPlanning = acceptsIncomingSnapshot
     ? carryAwaitingPlanning(current, incoming)
     : current.awaitingPlanning;
@@ -591,7 +599,7 @@ export function useTasks(options?: UseTasksOptions) {
       }
     }
     return Array.isArray(cachedTasks)
-      ? filterActiveTasks(cachedTasks.map(normalizeTask).map(({ releaseGate: _releaseGate, ...task }) => task as Task))
+      ? filterActiveTasks(cachedTasks.map(normalizeNonBoardTask))
       : [];
   });
   const [isStale, setIsStale] = useState(true);
@@ -1295,12 +1303,24 @@ export function useTasks(options?: UseTasksOptions) {
       tasksRef.current = nextTasks;
       setTasks(nextTasks);
     };
+    // FNXC:TerminalBoard 2026-09-14-04:18: SSE cannot assert held-anchor authority. Coalesce paused events into one canonical read plus at most one pending refresh, without dropping an event that races the read.
+    let terminalRefresh: Promise<void> | undefined;
+    let terminalRefreshPending = false;
+    const refreshTerminalDisplay = () => {
+      if (!active || isStale()) return;
+      if (terminalRefresh) { terminalRefreshPending = true; return; }
+      terminalRefresh = refreshTasksRef.current();
+      void terminalRefresh.finally(() => {
+        terminalRefresh = undefined;
+        if (terminalRefreshPending) { terminalRefreshPending = false; refreshTerminalDisplay(); }
+      });
+    };
     const handleCreated = (e: MessageEvent) => {
       if (isStale()) {
         traceDroppedStaleEvent();
         return;
       }
-      const task = normalizeTask(stripTransientReleaseGate(JSON.parse(e.data) as Task));
+      const task = normalizeTask(stripTransientBoardEvidence(JSON.parse(e.data) as Task));
       recordLiveMutation(task, isSoftDeleted(task));
       if (searchQueryRef.current) {
         void refreshTasksRef.current({ searchQueryOverride: searchQueryRef.current });
@@ -1341,7 +1361,7 @@ export function useTasks(options?: UseTasksOptions) {
       }
       // #1403: the move event carries `ColumnId` (custom column ids admitted).
       const { task, to }: { task: Task; from: ColumnId; to: ColumnId } = JSON.parse(e.data);
-      const normalizedTask = normalizeTask(stripTransientReleaseGate(task));
+      const normalizedTask = normalizeTask(stripTransientBoardEvidence(task));
       if (isSoftDeleted(normalizedTask)) {
         recordLiveMutation(normalizedTask, true);
         applyLiveTasks((prev) => prev.filter((candidate) => candidate.id !== normalizedTask.id));
@@ -1382,7 +1402,7 @@ export function useTasks(options?: UseTasksOptions) {
         void refreshTasksRef.current({ searchQueryOverride: searchQueryRef.current });
         return;
       }
-      const incoming = normalizeTask(stripTransientReleaseGate(JSON.parse(e.data) as Task));
+      const incoming = normalizeTask(stripTransientBoardEvidence(JSON.parse(e.data) as Task));
       recordLiveMutation(incoming, isSoftDeleted(incoming));
       if (isSoftDeleted(incoming)) {
         // FN-5135: treat deletedAt-bearing task:updated payloads as delete-equivalent.
@@ -1403,6 +1423,7 @@ export function useTasks(options?: UseTasksOptions) {
         return next;
       });
       advanceFreshnessClockForLiveUpdate();
+      if (incoming.paused === true && incoming.status === "paused") refreshTerminalDisplay();
     };
 
     const handleDeleted = (e: MessageEvent) => {
@@ -1414,7 +1435,7 @@ export function useTasks(options?: UseTasksOptions) {
         void refreshTasksRef.current({ searchQueryOverride: searchQueryRef.current });
         return;
       }
-      const task = normalizeTask(stripTransientReleaseGate(JSON.parse(e.data) as Task));
+      const task = normalizeTask(stripTransientBoardEvidence(JSON.parse(e.data) as Task));
       recordLiveMutation(task, true);
       applyLiveTasks((prev) => prev.filter((t) => t.id !== task.id));
     };
@@ -1429,7 +1450,7 @@ export function useTasks(options?: UseTasksOptions) {
         return;
       }
       const { task }: { task: Task } = JSON.parse(e.data);
-      const normalizedTask = normalizeTask(stripTransientReleaseGate(task));
+      const normalizedTask = normalizeTask(stripTransientBoardEvidence(task));
       if (isSoftDeleted(normalizedTask)) {
         recordLiveMutation(normalizedTask, true);
         applyLiveTasks((prev) => prev.filter((candidate) => candidate.id !== normalizedTask.id));
@@ -1489,6 +1510,7 @@ export function useTasks(options?: UseTasksOptions) {
           traceDroppedStaleEvent();
           return;
         }
+        applyLiveTasks(previous => previous.map(stripTransientBoardEvidence));
         revalidateAfterResume("sse-reconnect", "stream-reopened");
       },
     });

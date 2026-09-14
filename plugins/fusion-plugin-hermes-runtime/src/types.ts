@@ -44,7 +44,8 @@ export interface HermesStreamSession {
   nativeReceipt?: HermesSessionReceipt;
   runtimeContext?: HermesRuntimeContext;
   fusedSystemPrompt: string;
-  dispose(): void;
+  /** Await to observe completion of cancellation and owned child close. */
+  dispose(): void | Promise<void>;
 }
 
 export type AgentSession = HermesStreamSession;
@@ -56,6 +57,8 @@ export type AgentSession = HermesStreamSession;
  */
 export interface AgentRuntimeOptions {
   cwd: string;
+  /** Last host callback after launch resolution; refusal prevents child creation. */
+  beforeSpawnSession?: () => Promise<void> | void;
   systemPrompt: string;
   tools?: "coding" | "readonly";
   customTools?: unknown;

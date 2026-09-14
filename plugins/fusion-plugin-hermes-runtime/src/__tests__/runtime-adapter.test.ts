@@ -173,7 +173,7 @@ describe("HermesRuntimeAdapter — describeModel", () => {
 });
 
 describe("HermesRuntimeAdapter — dispose", () => {
-  it("is a no-op", async () => {
+  it("disposes an idle session without launching a child", async () => {
     const adapter = new HermesRuntimeAdapter({});
     const { session } = await adapter.createSession({
       cwd: "/repo",
@@ -221,10 +221,29 @@ describe("Hermes opt-in receipt delivery", () => {
     const pending = adapter.promptWithFallback(session, "task", { signal: controller.signal });
     await Promise.resolve();
     expect(onText).not.toHaveBeenCalled();
-    expect(mockReceipt).toHaveBeenCalledWith(expect.objectContaining({ profile: "pilot" }), receipt.sessionId, controller.signal);
+    expect(mockReceipt).toHaveBeenCalledWith(expect.objectContaining({ profile: "pilot" }), receipt.sessionId, expect.any(AbortSignal));
     finish(receipt); await pending;
     expect(session.nativeReceipt).toBe(receipt);
     expect(onText).toHaveBeenCalledOnce();
+  });
+  it("disposal rejects a late resolved export instead of accepting its receipt", async () => {
+    const adapter = new HermesRuntimeAdapter({ captureSessionReceipt: true });
+    const onText = vi.fn();
+    const { session } = await adapter.createSession({ cwd: "/repo", systemPrompt: "sys", onText });
+    let finish!: (value: unknown) => void;
+    mockReceipt.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = adapter.promptWithFallback(session, "task");
+    const rejected = expect(pending).rejects.toThrow(/aborted/);
+    await Promise.resolve();
+    expect(mockReceipt).toHaveBeenCalledOnce();
+    const disposed = session.dispose();
+    expect(mockReceipt.mock.calls[0]?.[2].aborted).toBe(true);
+    finish({ sessionId: "20260427_120000_abc123", scope: "session-cumulative" });
+    await disposed;
+    await rejected;
+    expect(session.nativeReceipt).toBeUndefined();
+    expect(session.messages).toEqual([]);
+    expect(onText).not.toHaveBeenCalled();
   });
   it("retains native continuity but rejects output when export fails and clears old receipts", async () => {
     const adapter = new HermesRuntimeAdapter({ captureSessionReceipt: true });

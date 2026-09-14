@@ -1,0 +1,15 @@
+{
+  "source": "efa8859baab1057e92c04f6d82b69acfab0a15ad",
+  "parentPid": 31752,
+  "startedAt": "2026-09-14T10:03:47.727Z",
+  "port": 63872,
+  "pg": "/tmp/303-scoped-directory-root-proof/pg-vswGtA",
+  "pgPid": 31804,
+  "pgStart": "31804 31752 Mon Sep 14 06:03:48 2026     /Users/man/worktrees/Fusion/300-live-integration/node_modules/.pnpm/@embedded-postgres+darwin-arm64@15.18.0-beta.17/node_modules/@embedded-postgres/darwin-arm64/native/bin/postgres -D /tmp/303-scoped-directory-root-proof/pg-vswGtA/data -p 63872 -c listen_addresses=127.0.0.1",
+  "childPid": 31819,
+  "dispatchAt": "2026-09-14T10:03:48.437Z",
+  "testExit": 0,
+  "pgStopped": true,
+  "finishedAt": "2026-09-14T10:03:53.288Z",
+  "portClosed": true
+}

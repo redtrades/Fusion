@@ -17,6 +17,7 @@ const severityAuditLog = createLogger("core-task-mutation-ops");
 import {TaskStore, storeLog} from "../store.js";
 import {TaskDeletedError, TaskNotFoundError} from "./errors.js";
 import type {LegacyAutoMergeStampReconcileResult} from "../store.js";
+import {isDeepStrictEqual} from "node:util";
 import {randomUUID} from "node:crypto";
 import {mkdir, readFile, writeFile, rename, unlink} from "node:fs/promises";
 import {join} from "node:path";
@@ -387,6 +388,127 @@ export async function updateTaskAtomicImpl(store: TaskStore, id: string, updater
       return store.updateTaskUnlocked(id, updates, runContext);
     });
   }
+
+/**
+ * FNXC:WorkflowOverlay 2026-09-14-01:26:
+ * Overlay receipts are an append-only, run-owned checkpoint in existing source metadata.
+ * Reset and overlay publication contend on the same PostgreSQL advisory transaction lock.
+ * Neither a caller-supplied updater nor a lifecycle/column patch crosses this boundary.
+ */
+export const WORKFLOW_OVERLAY_MAX_PHASES = 256;
+export const WORKFLOW_OVERLAY_MAX_BYTES = 1024 * 1024;
+export interface WorkflowOverlayAdmission {
+  runId: string;
+  leaseEpoch: number;
+  agentId: string;
+  nodeId: string;
+}
+export interface WorkflowOverlayState {
+  phaseCount: number;
+  previousEnvelope: Record<string, unknown> | null;
+  reviewedHeadOid: string | null;
+  receipts: Record<string, unknown>[];
+}
+export interface WorkflowOverlayStateWrite {
+  admission: WorkflowOverlayAdmission;
+  expectedPhaseCount: number;
+  operationId: string;
+  nextState: WorkflowOverlayState;
+}
+export type WorkflowOverlayStateWriteResult =
+  | { applied: true; task: Task; state: WorkflowOverlayState; replayed: boolean }
+  | { applied: false; reason: "unavailable" | "invalid-input" | "task-missing" | "task-deleted"
+      | "ownership-mismatch" | "revision-mismatch" | "invalid-checkpoint" };
+
+type StoredWorkflowOverlayState = WorkflowOverlayState & {
+  writeFence: { admission: WorkflowOverlayAdmission; operationId: string; expectedPhaseCount: number };
+};
+
+export async function updateWorkflowOverlayStateFencedImpl(
+  store: TaskStore,
+  id: string,
+  input: WorkflowOverlayStateWrite,
+): Promise<WorkflowOverlayStateWriteResult> {
+  const layer = store.asyncLayer;
+  if (!layer?.projectId) return { applied: false, reason: "unavailable" };
+  // FNXC:WorkflowOverlay 2026-09-14-01:26: Own JSON values before awaiting any lock; reject lossy serialization and bound durable growth.
+  let request: WorkflowOverlayStateWrite;
+  try {
+    const json = JSON.stringify(input);
+    if (Buffer.byteLength(json, "utf8") > WORKFLOW_OVERLAY_MAX_BYTES) return { applied: false, reason: "invalid-input" };
+    request = JSON.parse(json) as WorkflowOverlayStateWrite;
+    if (!isDeepStrictEqual(input, request)) return { applied: false, reason: "invalid-input" };
+  } catch { return { applied: false, reason: "invalid-input" }; }
+  const { admission, expectedPhaseCount, operationId, nextState } = request;
+  const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
+  if (!record(admission) || !record(nextState)
+      || ![admission.runId, admission.agentId, admission.nodeId, operationId].every(v => typeof v === "string" && v.trim().length > 0 && v.length <= 256)
+      || !Number.isSafeInteger(admission.leaseEpoch) || admission.leaseEpoch < 0
+      || !Number.isSafeInteger(expectedPhaseCount) || expectedPhaseCount < 0 || expectedPhaseCount >= WORKFLOW_OVERLAY_MAX_PHASES
+      || nextState.phaseCount !== expectedPhaseCount + 1
+      || !Array.isArray(nextState.receipts) || nextState.receipts.length !== nextState.phaseCount || !nextState.receipts.every(record)
+      || !(nextState.previousEnvelope === null || record(nextState.previousEnvelope))
+      || !(nextState.reviewedHeadOid === null || typeof nextState.reviewedHeadOid === "string")
+      || Object.keys(nextState).some(key => !["phaseCount", "previousEnvelope", "reviewedHeadOid", "receipts"].includes(key))
+      || Object.keys(admission).some(key => !["runId", "leaseEpoch", "agentId", "nodeId"].includes(key))) {
+    return { applied: false, reason: "invalid-input" };
+  }
+  return store.withTaskLock(id, async () => {
+    const outcome = await layer.transactionImmediate(async (tx): Promise<WorkflowOverlayStateWriteResult> => {
+      await acquireTaskAdvisoryXactLock(tx, layer.projectId, id);
+      await tx.select({ id: schema.project.tasks.id }).from(schema.project.tasks)
+        .where(and(eq(schema.project.tasks.id, id), taskProjectScope(layer))).for("update");
+      const row = await readTaskRowInTransaction(tx, id, { includeDeleted: true }, layer.projectId);
+      if (!row) return { applied: false, reason: "task-missing" };
+      if (row.deletedAt) return { applied: false, reason: "task-deleted" };
+      const current = store.rowToTask(store.pgRowToTaskRow(row));
+      if (current.checkoutRunId !== admission.runId || current.checkoutLeaseEpoch !== admission.leaseEpoch
+          || current.checkedOutBy !== admission.agentId || current.checkoutNodeId !== admission.nodeId) {
+        return { applied: false, reason: "ownership-mismatch" };
+      }
+      const namespace = current.sourceMetadata?.procedureEngineLive;
+      if (namespace !== undefined && (!record(namespace) || !record(namespace.runs))) return { applied: false, reason: "invalid-checkpoint" };
+      const runs = (namespace as { runs: Record<string, StoredWorkflowOverlayState> } | undefined)?.runs ?? {};
+      let totalPhases = 0;
+      for (const prior of Object.values(runs)) {
+        if (!record(prior) || !Number.isSafeInteger(prior.phaseCount) || prior.phaseCount < 1
+            || !Array.isArray(prior.receipts) || prior.receipts.length !== prior.phaseCount) return { applied: false, reason: "invalid-checkpoint" };
+        totalPhases += prior.phaseCount;
+      }
+      const stored = Object.hasOwn(runs, admission.runId) ? runs[admission.runId] : undefined;
+      if (stored !== undefined) {
+        if (!record(stored) || !record(stored.writeFence) || !Array.isArray(stored.receipts)
+            || !Number.isSafeInteger(stored.phaseCount) || stored.phaseCount !== stored.receipts.length) {
+          return { applied: false, reason: "invalid-checkpoint" };
+        }
+        if (stored.writeFence.admission?.runId !== admission.runId) return { applied: false, reason: "invalid-checkpoint" };
+        const { writeFence, ...state } = stored;
+        if (writeFence.operationId === operationId && writeFence.expectedPhaseCount === expectedPhaseCount && isDeepStrictEqual(state, nextState)) {
+          return { applied: true, task: current, state, replayed: true };
+        }
+        if (stored.phaseCount !== expectedPhaseCount || writeFence.operationId === operationId) return { applied: false, reason: "revision-mismatch" };
+        if (!isDeepStrictEqual(stored.receipts, nextState.receipts.slice(0, expectedPhaseCount))) return { applied: false, reason: "invalid-checkpoint" };
+      } else if (expectedPhaseCount !== 0) return { applied: false, reason: "revision-mismatch" };
+      const checkpoint: StoredWorkflowOverlayState = { ...nextState, writeFence: { admission, operationId, expectedPhaseCount } };
+      const nextNamespace = { runs: { ...runs, [admission.runId]: checkpoint } };
+      if (totalPhases >= WORKFLOW_OVERLAY_MAX_PHASES || Buffer.byteLength(JSON.stringify(nextNamespace), "utf8") > WORKFLOW_OVERLAY_MAX_BYTES) {
+        return { applied: false, reason: "invalid-input" };
+      }
+      const [updated] = await tx.update(schema.project.tasks).set({
+        sourceMetadata: { ...current.sourceMetadata, procedureEngineLive: nextNamespace },
+        updatedAt: new Date().toISOString(),
+      }).where(and(eq(schema.project.tasks.id, id), taskProjectScope(layer), isNull(schema.project.tasks.deletedAt))).returning();
+      if (!updated) return { applied: false, reason: "task-missing" };
+      return { applied: true, task: store.rowToTask(store.pgRowToTaskRow(updated)), state: nextState, replayed: false };
+    });
+    if (outcome.applied && !outcome.replayed) {
+      await store.writeTaskJsonFile(store.taskDir(id), outcome.task);
+      if (store.isWatching) store.taskCache.set(id, { ...outcome.task });
+      store.emitTaskLifecycleEventSafely("task:updated", [outcome.task]);
+    }
+    return outcome;
+  });
+}
 
 export type FencedWorkflowStepResultsPatch = Pick<
   Task,

@@ -519,7 +519,8 @@ export async function updateWorkflowOverlayStateFencedImpl(
       if (!updated) return { applied: false, reason: "task-missing" };
       return { ...prepared, task: store.rowToTask(store.pgRowToTaskRow(updated)) };
     });
-    if (outcome.applied && !outcome.replayed) {
+    // FNXC:WorkflowOverlay 2026-09-14-01:50: Exact retry also repairs a failed disk/cache projection without repeating the database mutation.
+    if (outcome.applied) {
       await store.writeTaskJsonFile(store.taskDir(id), outcome.task);
       if (store.isWatching) store.taskCache.set(id, { ...outcome.task });
       store.emitTaskLifecycleEventSafely("task:updated", [outcome.task]);

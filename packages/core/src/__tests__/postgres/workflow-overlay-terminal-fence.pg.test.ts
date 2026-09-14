@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from "vitest";
 import { TaskStore } from "../../store.js";
 import { pgDescribe, createSharedPgTaskStoreTestHarness } from "../../__test-utils__/pg-test-harness.js";
@@ -66,6 +68,7 @@ pgDescribe("workflow overlay terminal transition", () => {
     finally { store.writeTaskJsonFile = original; }
     await expect(store.applyWorkflowOverlayTerminalFenced(t.id, input)).resolves.toMatchObject({ applied: true, replayed: true });
     expect((await store.getTask(t.id)).sourceMetadata?.procedureEngineLive).toMatchObject({ runs: { "graph-a": input.nextState } });
+    expect(JSON.parse(await readFile(join(store.taskDir(t.id), "task.json"), "utf8")).sourceMetadata?.procedureEngineLive).toMatchObject({ runs: { "graph-a": input.nextState } });
   });
   it("rejects stale owners and an invalid target without publishing checkpoint metadata", async () => {
     const t = await task();

@@ -82,7 +82,14 @@ export async function applyWorkflowOverlayTerminalFencedImpl(
       if (current.column !== expectedColumn) return { result: { applied: false, reason: "column-mismatch" } as WorkflowOverlayTerminalResult };
       return { current, rowRevision: version.rowRevision };
     });
-    if (snapshot.result) return snapshot.result;
+    if (snapshot.result) {
+      if (snapshot.result.applied) {
+        await store.writeTaskJsonFile(store.taskDir(id), snapshot.result.task);
+        if (store.isWatching) store.taskCache.set(id, { ...snapshot.result.task });
+        store.emitTaskLifecycleEventSafely("task:updated", [snapshot.result.task]);
+      }
+      return snapshot.result;
+    }
     const options: MoveTaskOptions = { moveSource: "engine", workflowMoveSource: "workflow-graph" };
     const movePolicyPreflight = await store.prepareWorkflowMovePolicyPreflight(id, targetColumn, options, { fromHandoff: false });
     try {

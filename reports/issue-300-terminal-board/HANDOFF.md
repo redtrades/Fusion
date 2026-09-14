@@ -107,3 +107,11 @@ actor, unknown/missing disposition, and contradictory non-operator reason pairs.
 Before fix: 4 failed / 6 passed. After fix: all 10 adapter tests pass. Narrow ESLint,
 dashboard server typecheck and whitespace checks pass. Original 98d7409f1 remains
 an immutable review boundary; this correction is a separate local commit.
+
+## Coordinator integration evidence
+
+Exact source 2b4e8c9b6889d37ed8470fdedf9f0253a63a4d18 (including initial Board 98d7409f1c8f476e7d38006840076b3735d030e9) received an independent supplied-diff PASS from actual nous/upstage/solar-pro4:free through Hermes. Raw verdict and native usage are adjacent: 2 API calls, 10,880 total tokens, estimated USD 0, no fallback or auxiliary compaction. The author family is OpenAI; configured Git author is not model provenance.
+
+Root cherry-picked both changes into local integration as 2fd150e8d and 899fd975b. Root reran all three targeted Board/cache/API suites on that composition: 121 passed, zero skips, exit 0. Log: /tmp/300-board-coordinator-tests.log. jsdom emitted existing canvas getContext warnings; no failed assertions. These tests and the retained synthetic preview do not prove deployed UI, authorization or unattended pilot acceptance.
+
+Coordinator dashboard server and app typechecks also passed on 899fd975b (pnpm --filter @fusion/dashboard typecheck, exit 0; /tmp/300-board-coordinator-typecheck.log).

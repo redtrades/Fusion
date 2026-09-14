@@ -45,3 +45,17 @@ Receipts: `codex-standalone-manager-first-trust-receipt.json` and `codex-standal
 Worker inspection of the same 0.154 tag found that SessionConfigured exposes exact session/thread identity and rollout_path before startup hooks are queued (session/session.rs:1543–1573,1639). Pending SessionStart hooks execute only in the first turn pipeline (session/turn.rs:287 and hook_runtime.rs:124–166). Therefore waiting for SessionStart before permitting the first protected prompt is circular on this version. Neither a longer no-query timeout nor re-trusting the hook resolves it.
 
 The candidate matcher and snake_case event payload match the native schema. Hook environment inheritance also preserves FUSION_CLI_HOOK_CONTEXT. Missing/nonmatching hooks, timeout/spawn/nonzero failures do not stop a turn; only a valid successful hook response with continue:false does. A bootstrap prompt is therefore not a fail-closed substitute. No bootstrap prompt was sent. Next bounded investigation is a supported preturn exact-identity surface plus exact-ID transcript metadata lookup; no newest-file guessing or model-output inference.
+
+## Full preturn identity and failed cross-server lookup
+
+Actual no-query Codex 0.154.0 session cli-bb81cd18 used the supported per-process tui.status_line=["session-id"] setting. Root observed full UUID 01a09e38-27d6-75a0-a45a-d768aba6a602 before any prompt. Native title truncation is not a substitute. A separate native app-server thread/read for that exact ID returned -32600, thread not loaded. No authoritative transcript path or inode was established. The embedded TUI session was not visible to that other server.
+
+Receipt codex-status-id-receipt.json records zero prompt writes, taskId:null, source53cce8ce8, build1abbacb4f and unchanged native-hook hash. codex-exact-id-thread-read.json preserves the lookup error. Both are under the scratch root named above. The 120-second probe finished at 04:42:52Z with private context removed, child/endpoint/PostgreSQL cleaned up. No real task accounting acceptance.
+
+Exact-version source also rules out graceful shutdown as a way to materialize an empty no-turn session: initial context remains deferred and empty shutdown creates neither rollout nor SQLite thread row. A dummy bootstrap turn remains rejected because missing/failed hooks do not fail closed. Muse reports no transport in its workstreams to reuse and recommends adapting the native structured preturn handshake. Next work checks supported app-server thread/start and existing Fusion seams; internal Rust SessionConfigured alone is not an external transport contract.
+
+## Supported structured handshake proof
+
+The bounded native app-server probe succeeded using only initialize and thread/start, without turn/start, permission overrides or hook-trust changes. Actual response returned full id/sessionId 01a09e41-4fbc-73f3-96db-73cd2e58a8e2, exact canonical standalone cwd, and authoritative rollout path. The path was absent at response and remained absent after clean stdin-close exit0. Raw allowlisted receipt: codex-thread-start-handshake.json in the same scratch root. This establishes an external preturn identity/path transport, not an existing inode, an accounting baseline, first-request accounting or budget enforcement.
+
+The next implementation must represent the authoritative future path explicitly, validate first creation/session metadata, and count from byte zero without suppressing first-request usage. Existing Fusion ACP and one-shot exec transports are not assumed to supply this app-server handshake.

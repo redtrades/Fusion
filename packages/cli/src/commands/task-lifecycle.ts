@@ -943,7 +943,7 @@ export function createPrNodeGithubOps(
       });
       return { prNumber: created.number, prUrl: created.url, headOid: refreshed.headOid };
     },
-    mergePr: async ({ task, entity, integrationRemote, persistRefreshedHead, signal }) => {
+    mergePr: async ({ task, entity, expectedHeadOid, integrationRemote, persistRefreshedHead, signal }) => {
       if (entity.prNumber == null) {
         throw new Error(`pr-merge: entity ${entity.id} has no persisted prNumber`);
       }
@@ -958,6 +958,8 @@ export function createPrNodeGithubOps(
         signal,
       });
       throwIfRefreshAborted(signal);
+      // FNXC:ExactHeadMerge 2026-09-14-06:13: A supplied review fence cannot follow a refreshed head; changed commits require review again.
+      if (expectedHeadOid !== undefined && refreshed.headOid !== expectedHeadOid) return { status: "stale-head" };
       // Re-read after a rewrite: GitHub's head OID is the merge fence, not a
       // locally remembered pre-refresh value.
       const status = await github.getPrStatus(owner ?? "", name ?? "", entity.prNumber);
@@ -971,12 +973,13 @@ export function createPrNodeGithubOps(
       try {
         throwIfRefreshAborted(signal);
         const auto = await options.isNativeAutoMergeEnabled?.(task) ?? false;
+        throwIfRefreshAborted(signal);
         await github.mergePr({
           owner,
           repo: name,
           number: entity.prNumber,
           method: "squash",
-          ...(auto ? { auto: true } : { expectedHeadOid: refreshed.headOid }),
+          ...(expectedHeadOid !== undefined ? { expectedHeadOid } : auto ? { auto: true } : { expectedHeadOid: refreshed.headOid }),
         });
         return { status: "merged-requested", headOid: refreshed.headOid };
       } catch (err) {

@@ -1,4 +1,4 @@
-import { isDeepStrictEqual } from "node:util";
+import { isDeepStrictEqual, types as utilTypes } from "node:util";
 import type {
   Settings,
   TaskDetail,
@@ -53,27 +53,36 @@ import type { WorkflowColumnBoundary } from "./workflow-column-boundary.js";
 import { BranchWriteProvenanceError } from "@fusion/core";
 import { WorktreeBaseRefreshError, WorkspacePreparationError } from "../worktree/worktree-acquisition.js";
 
-// FNXC:PluginNativeDelegation 2026-09-14-01:04:
-// Graph context can contain native function capabilities. Snapshot plain data
-// recursively while retaining those function identities; structuredClone alone
-// rejects them. Non-plain data uses the native clone or refuses delegation.
+// FNXC:PluginNativeDelegation 2026-09-14-01:26:
+// Compare descriptor snapshots, never cloned objects against live inputs. This
+// retains class/prototype and function identity, symbols, non-enumerable fields,
+// cycles and accessor identity without invoking getters. Class private state and
+// function closure state are opaque capabilities, not inspectable admission data.
 function snapshotDelegationInput(value: unknown, seen = new WeakMap<object, unknown>()): unknown {
   if (value === null || typeof value !== "object") return value;
   if (seen.has(value)) return seen.get(value);
-  if (Array.isArray(value)) {
-    const copy: unknown[] = [];
-    seen.set(value, copy);
-    for (const item of value) copy.push(snapshotDelegationInput(item, seen));
-    return copy;
+  if (utilTypes.isProxy(value) || utilTypes.isWeakMap(value) || utilTypes.isWeakSet(value)
+    || utilTypes.isPromise(value) || utilTypes.isAnyArrayBuffer(value) || ArrayBuffer.isView(value)) {
+    throw new Error("Native node delegation does not support opaque mutable admission data");
   }
-  const prototype = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null) return structuredClone(value);
-  const copy = Object.create(prototype) as Record<PropertyKey, unknown>;
-  seen.set(value, copy);
+  const snapshot = { prototype: Object.getPrototypeOf(value) as unknown, properties: [] as unknown[], state: undefined as unknown };
+  seen.set(value, snapshot);
   for (const key of Reflect.ownKeys(value)) {
-    copy[key] = snapshotDelegationInput((value as Record<PropertyKey, unknown>)[key], seen);
+    const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
+    snapshot.properties.push([key, "value" in descriptor
+      ? { ...descriptor, value: snapshotDelegationInput(descriptor.value, seen) }
+      : descriptor]);
   }
-  return copy;
+  // Native slot readers bypass user-overridden accessors/iterators. Their data
+  // participates in the same cycle/alias snapshot as ordinary own properties.
+  if (utilTypes.isDate(value)) snapshot.state = Date.prototype.getTime.call(value);
+  if (utilTypes.isMap(value)) snapshot.state = Array.from(Map.prototype.entries.call(value),
+    ([key, item]) => [snapshotDelegationInput(key, seen), snapshotDelegationInput(item, seen)]);
+  if (utilTypes.isSet(value)) snapshot.state = Array.from(Set.prototype.values.call(value),
+    item => snapshotDelegationInput(item, seen));
+  if (utilTypes.isRegExp(value)) snapshot.state = ["source", "global", "ignoreCase", "multiline", "dotAll", "unicode", "sticky", "hasIndices", "unicodeSets"]
+    .map(key => Object.getOwnPropertyDescriptor(RegExp.prototype, key)?.get?.call(value));
+  return snapshot;
 }
 
 export type WorkflowNodeOutcome = "success" | "failure";
@@ -2024,12 +2033,15 @@ export class WorkflowGraphExecutor {
     if (extensionIds.length === 0) return undefined;
 
     let admittedInput: unknown;
-    let snapshotAvailable = false;
-    try {
-      admittedInput = snapshotDelegationInput([node, task, context]);
-      snapshotAvailable = true;
-    } catch {
-      // Existing non-delegating extensions retain their behavior.
+    let snapshotError: unknown;
+    if (nativeHandler) {
+      try {
+        admittedInput = snapshotDelegationInput([node, task, context]);
+      } catch (error) {
+        // Non-delegating extensions retain their behavior; only delegation
+        // reports unsupported admission data, with its original cause.
+        snapshotError = error;
+      }
     }
     const registry = getWorkflowExtensionRegistry();
     for (const extensionId of extensionIds) {
@@ -2048,10 +2060,11 @@ export class WorkflowGraphExecutor {
         if (defaultResult) return defaultResult;
         defaultResult = Promise.resolve().then(async () => {
           if (!active || signal?.aborted) throw new Error("Native node delegation is no longer active");
-          if (!snapshotAvailable || !isDeepStrictEqual([node, task, context], admittedInput)) {
+          if (!nativeHandler) throw new WorkflowIrError(`No handler registered for node kind: ${node.kind}`);
+          if (snapshotError) throw snapshotError;
+          if (!isDeepStrictEqual(snapshotDelegationInput([node, task, context]), admittedInput)) {
             throw new Error("Native node delegation inputs changed after admission");
           }
-          if (!nativeHandler) throw new WorkflowIrError(`No handler registered for node kind: ${node.kind}`);
           try {
             return await nativeHandler();
           } catch (error) {

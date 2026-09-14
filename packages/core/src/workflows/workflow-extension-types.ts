@@ -103,8 +103,15 @@ export interface WorkflowNodeHandlerInput {
    * overrides; concurrent/repeated calls share one promise, including rejection.
    * Available only during this handler invocation; cancellation or mutation of
    * the supplied node/task/context refuses dispatch. Return contextPatch instead.
+   * FNXC:PluginNativeDelegation 2026-09-14-01:26:
+   * Admission compares own property descriptors and Date/Map/Set/RegExp state;
+   * accessors and function/class capabilities retain identity without evaluation.
+   * Private fields and closure state remain opaque. Proxies, weak collections,
+   * promises and binary buffers/views cannot be admission data for delegation.
+   * Rethrow native errors unchanged to preserve native retry/suspension handling;
+   * wrapping an error changes it to a plugin failure. Explicit failure may absorb it.
    */
-  runDefault?: () => Promise<WorkflowNodeExtensionResult>;
+  runDefault?: () => Promise<Extract<WorkflowNodeExtensionResult, { outcome: "success" | "failure" }>>;
 }
 
 export type WorkflowNodeExtensionHandler =

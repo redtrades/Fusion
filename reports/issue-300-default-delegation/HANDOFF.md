@@ -70,3 +70,38 @@ only the private overlay/plugin foundation. Muse's issue 268 worker retains shar
 Fusion ownership; this worktree never edits its files. This capability is optional;
 legacy runtimes are detected by absence of `input.runDefault` and must fail closed
 for overlays requiring native delegation.
+
+## Claude source review corrections (supersedes initial snapshot limitation)
+
+Claude reviewed b49fad7b7565315d4ed1d69f79e8075e35dc4300, agents issue300 comment5657739669,
+PASS with findings. Root requested correction before acceptance. F1–F4 reproduced
+as five failures in the expanded real-executor fixture suite
+(`/tmp/fusion300-review-red.log`, 5 failed/22 passed). Replaced clone-vs-original
+comparison with descriptor snapshots on both sides. Class prototype identity,
+function fields, symbol/non-enumerable descriptors, cycles and accessor identity
+are preserved. Getters are never invoked. Date/Map/Set/RegExp native state is read
+through intrinsic methods, bypassing custom accessors/iterators. Private class
+fields and closure state are explicitly opaque capabilities; proxies, weak
+collections, promises and binary buffers/views reject delegation with an accurate
+unsupported-data error. No snapshot is made when there is no native handler.
+
+F5 narrows runDefault to success/failure results and documents that native error
+identity must be preserved when rethrowing for native classification. No new
+execution capability or launcher change.
+
+After corrections: 63 tests passed across the same three focused files; core and
+engine typechecks and production-source ESLint passed. Logs:
+`/tmp/fusion300-review-final-tests.log`, `/tmp/fusion300-review-core.log`,
+`/tmp/fusion300-review-engine.log`, `/tmp/fusion300-review-lint.log`.
+The preceding 733-test gate, full standard workspace build, and linked-runtime
+boot smoke belong specifically to b49fad7, not this changed source. Stock boot
+failed a baseline bundled macOS ICU link issue; local ABI-linked smoke passed.
+Detailed separate evidence: `/tmp/fusion300-integration/BUILD-GATE-VERIFICATION.md`.
+Temporary PG verification server was stopped cleanly. Independent review of these
+corrections and live acceptance remain outstanding.
+
+Native session association remains a separate scope boundary: run-cli-agent-node
+maps CliTaskOutcome to WorkflowNodeResult but drops its exact sessionId. Suggested
+bounded follow-up is an additive node-keyed contextPatch containing that ID on
+terminal returns; no lookup of a latest/task session and no launcher changes.
+No edits to that production file in this correction.

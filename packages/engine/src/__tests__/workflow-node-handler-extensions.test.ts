@@ -328,6 +328,92 @@ describe("workflow node-handler extensions", () => {
     expect(nativeRuns).toBe(0);
   });
 
+  it.each(["class", "function-field", "nonenumerable", "accessor"] as const)("delegates unchanged %s context without invoking getters", async shape => {
+    let getterReads = 0;
+    class Capability { value = "admitted"; }
+    const capability: Record<string, unknown> = shape === "class" || shape === "function-field"
+      ? new Capability() as unknown as Record<string, unknown> : {};
+    if (shape === "function-field") capability.invoke = () => "capability";
+    if (shape === "nonenumerable") Object.defineProperty(capability, "hidden", { value: "admitted", enumerable: false });
+    if (shape === "accessor") Object.defineProperty(capability, "lazy", {
+      get() { getterReads++; throw new Error("must not invoke accessor"); }, enumerable: true,
+    });
+    const workflow = delegatedWorkflow(async ({ runDefault }) => runDefault!());
+    const native = vi.fn(async (_node, ctx) => {
+      expect(ctx.context.capability).toBe(capability);
+      return { outcome: "success" as const };
+    });
+    const executor = new WorkflowGraphExecutor({ initialContext: { capability }, handlers: { prompt: native } });
+    const result = await executor.run({ id: "FN-SHAPE" } as TaskDetail, settingsOn, workflow);
+    expect(result.outcome).toBe("success");
+    expect(native).toHaveBeenCalledTimes(1);
+    expect(getterReads).toBe(0);
+  });
+
+  it.each(["value", "descriptor", "getter", "map", "set", "date"] as const)("refuses changed %s state before dispatch", async shape => {
+    class Capability { value = "admitted"; }
+    const capability = new Capability();
+    Object.defineProperty(capability, "hidden", { value: "admitted", writable: true, configurable: true });
+    Object.defineProperty(capability, "lazy", { get: () => "admitted", configurable: true });
+    const map = new Map([["key", { value: "admitted" }]]);
+    const set = new Set(["admitted"]);
+    const date = new Date(0);
+    const workflow = delegatedWorkflow(async ({ runDefault }) => {
+      if (shape === "value") capability.value = "changed";
+      if (shape === "descriptor") Object.defineProperty(capability, "hidden", { enumerable: true });
+      if (shape === "getter") Object.defineProperty(capability, "lazy", { get: () => "changed" });
+      if (shape === "map") map.get("key")!.value = "changed";
+      if (shape === "set") set.add("changed");
+      if (shape === "date") date.setTime(1);
+      return runDefault!();
+    });
+    const native = vi.fn(async () => ({ outcome: "success" as const }));
+    const executor = new WorkflowGraphExecutor({ initialContext: { capability, map, set, date }, handlers: { prompt: native } });
+    const result = await executor.run({ id: "FN-DESCRIPTOR" } as TaskDetail, settingsOn, workflow);
+    expect(result.outcome).toBe("failure");
+    expect(native).not.toHaveBeenCalled();
+  });
+
+  it("does not inspect context when no native handler exists", async () => {
+    const capability = { value: "admitted" };
+    const inspect = vi.spyOn(Object, "getOwnPropertyDescriptor");
+    try {
+      const workflow = delegatedWorkflow(async () => ({ outcome: "success" }));
+      const executor = new WorkflowGraphExecutor({ initialContext: { capability }, handlers: { prompt: undefined } });
+      const result = await executor.run({ id: "FN-NO-NATIVE" } as TaskDetail, settingsOn, workflow);
+      expect(result.outcome).toBe("success");
+      expect(inspect.mock.calls.some(([target]) => target === capability)).toBe(false);
+    } finally {
+      inspect.mockRestore();
+    }
+  });
+
+  it("preserves cycles, symbol descriptors and native collection state without reading accessors", async () => {
+    const marker = Symbol("marker");
+    const capability = Object.create(null);
+    capability.self = capability;
+    Object.defineProperty(capability, marker, { value: () => "native capability" });
+    const map = new Map([[capability, capability]]);
+    const set = new Set([capability]);
+    Object.defineProperty(map, Symbol.iterator, { get() { throw new Error("must not invoke custom iterator"); } });
+    const workflow = delegatedWorkflow(async ({ runDefault }) => runDefault!());
+    const native = vi.fn(async () => ({ outcome: "success" as const }));
+    const executor = new WorkflowGraphExecutor({ initialContext: { capability, map, set, date: new Date(0), pattern: /abc/gi }, handlers: { prompt: native } });
+    const result = await executor.run({ id: "FN-CYCLE" } as TaskDetail, settingsOn, workflow);
+    expect(result.outcome).toBe("success");
+    expect(native).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports unsupported opaque admission data instead of claiming it was mutated", async () => {
+    const workflow = delegatedWorkflow(async ({ runDefault }) => runDefault!());
+    const native = vi.fn(async () => ({ outcome: "success" as const }));
+    const executor = new WorkflowGraphExecutor({ initialContext: { opaque: new WeakMap() }, handlers: { prompt: native } });
+    const result = await executor.run({ id: "FN-OPAQUE" } as TaskDetail, settingsOn, workflow);
+    expect(result.outcome).toBe("failure");
+    expect(result.context["node:worker:error"]).toContain("does not support opaque mutable admission data");
+    expect(native).not.toHaveBeenCalled();
+  });
+
   it("does not cache native delegation across separate admitted runs", async () => {
     let nativeRuns = 0;
     const workflow = delegatedWorkflow(async ({ runDefault }) => runDefault!());

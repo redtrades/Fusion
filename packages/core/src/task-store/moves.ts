@@ -50,6 +50,13 @@ export async function applyWorkflowOverlayTerminalFencedImpl(
   if (!request || ![input.expectedColumn, input.targetColumn].every(v => typeof v === "string" && v.length > 0 && v.length <= 256)) {
     return { applied: false, reason: "invalid-input" };
   }
+  // Terminal disposition must carry its existing reason; no new reason taxonomy is introduced here.
+  const terminalReceipt = request.nextState.receipts.at(-1)?.terminalBlock ?? request.nextState.receipts.at(-1)?.terminal;
+  const pauseReason = terminalReceipt && typeof terminalReceipt === "object" && !Array.isArray(terminalReceipt)
+    ? (terminalReceipt as Record<string, unknown>).reason : undefined;
+  if (typeof pauseReason !== "string" || !pauseReason.trim() || pauseReason.length > 1024) {
+    return { applied: false, reason: "invalid-input" };
+  }
   const expectedColumn = input.expectedColumn, targetColumn = input.targetColumn;
   return store.withTaskLock(id, async () => {
     const snapshot = await layer.transactionImmediate(async tx => {
@@ -67,6 +74,7 @@ export async function applyWorkflowOverlayTerminalFencedImpl(
         const { writeFence, ...state } = checkpoint!;
         const unambiguous = isWorkflowOverlayRowRevisionCurrent(terminal.fullTransactionId, terminal.rowRevision, version.fullTransactionId);
         if (unambiguous && version.rowRevision === terminal.rowRevision && current.column === targetColumn
+            && current.paused === true && current.status === "paused" && current.pausedReason === pauseReason && current.error === pauseReason
             && terminal.targetColumn === targetColumn && terminal.expectedColumn === expectedColumn
             && current.checkoutLeaseEpoch === request.admission.leaseEpoch
             && isDeepStrictEqual(writeFence.admission, request.admission)
@@ -1277,6 +1285,20 @@ export async function moveTaskInternalImpl(store: TaskStore, id: string, toColum
         };
         if (Buffer.byteLength(JSON.stringify(namespace), "utf8") > WORKFLOW_OVERLAY_MAX_BYTES) throw new WorkflowOverlayTerminalRejected("invalid-input");
         task.sourceMetadata = prepared.task.sourceMetadata;
+        /*
+        FNXC:WorkflowOverlay 2026-09-14:
+        A same-column terminal receipt alone leaves WIP eligible for orphan/heartbeat redispatch.
+        Persist native suspension with the receipt in this fenced transaction. Do not bind the pause
+        to the worker: assignment changes must not implicitly release a terminal disposition.
+        Explicit fenced release/continuation is separate work; this is containment, not WS16 columns.
+        */
+        const terminalEntry = fence.request.nextState.receipts.at(-1)!;
+        const terminalReceipt = (terminalEntry.terminalBlock ?? terminalEntry.terminal) as Record<string, unknown>;
+        task.paused = true;
+        task.status = "paused";
+        task.pausedReason = terminalReceipt.reason as string;
+        task.error = terminalReceipt.reason as string;
+        task.pausedByAgentId = undefined;
       }
       if (internal.terminalFailureApply) {
         /*

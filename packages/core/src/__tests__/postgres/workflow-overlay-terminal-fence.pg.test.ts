@@ -12,13 +12,62 @@ pgDescribe("workflow overlay terminal transition", () => {
   const admission = { runId: "checkout-a", leaseEpoch: 1, agentId: "agent-a", nodeId: "host-a" };
   const request = () => ({ admission, expectedPhaseCount: 0, expectedColumn: "todo", targetColumn: "in-progress", operationId: "terminal-a",
     nextState: { runId: "graph-a", claimId: "claim-a", occurrence: 0, phaseCount: 1, previousEnvelope: null, reviewedHeadOid: null,
-      receipts: [{ nodeInstanceId: "blocked-sink:1", terminal: { reason: "missing-input", blockingNodeId: "builder", resumeActor: "orchestrator", blockedAt: "2026-09-14T01:26:00Z", envelopeDigests: [] } }] } });
+      receipts: [{ nodeInstanceId: "blocked-sink:1", terminalBlock: { reason: "missing-input", blockingNodeId: "builder", resumeActor: "orchestrator", blockedAt: "2026-09-14T01:26:00Z", envelopeDigests: [] } }] } });
   async function task() {
     const t = await h.store().createTask({ description: "atomic terminal fixture" });
     await h.store().updateTask(t.id, { checkedOutBy: admission.agentId, checkoutNodeId: admission.nodeId,
       checkoutRunId: admission.runId, checkoutLeaseEpoch: admission.leaseEpoch });
     return t;
   }
+  it("atomically suspends a same-column terminal disposition in its original WIP role", async () => {
+    const t = await h.store().createTask({ description: "same-column suspension fixture" });
+    await h.store().moveTask(t.id, "in-progress");
+    await h.store().updateTask(t.id, { checkedOutBy: admission.agentId, checkoutNodeId: admission.nodeId,
+      checkoutRunId: admission.runId, checkoutLeaseEpoch: admission.leaseEpoch });
+    const terminalRequest = { ...request(), expectedColumn: "in-progress", targetColumn: "in-progress" };
+    await expect(h.store().applyWorkflowOverlayTerminalFenced(t.id, terminalRequest)).resolves.toMatchObject({ applied: true });
+    const persisted = await h.store().getTask(t.id);
+    expect(persisted.column).toBe("in-progress");
+    expect(persisted.sourceMetadata?.procedureEngineLive).toMatchObject({ runs: { "graph-a": terminalRequest.nextState } });
+    expect(persisted.paused).toBe(true);
+    expect(persisted.status).toBe("paused");
+    expect(persisted.pausedReason).toBe("missing-input");
+    expect(persisted.error).toBe("missing-input");
+    expect(persisted.pausedByAgentId).toBeUndefined();
+    await expect(h.store().applyWorkflowOverlayTerminalFenced(t.id, terminalRequest)).resolves.toMatchObject({ applied: true, replayed: true });
+    const replayed = await h.store().getTask(t.id);
+    expect(replayed.paused).toBe(true);
+    expect(replayed.pausedReason).toBe("missing-input");
+  });
+  it("does not redispatch an assigned same-column terminal task after heartbeat", async () => {
+    const { resumeTaskForAgent } = await import("../../../../engine/src/executor/resume-task-for-agent.js");
+    const t = await h.store().createTask({ description: "terminal heartbeat fixture" });
+    await h.store().moveTask(t.id, "in-progress");
+    await h.store().updateTask(t.id, { checkedOutBy: admission.agentId, checkoutNodeId: admission.nodeId,
+      checkoutRunId: admission.runId, checkoutLeaseEpoch: admission.leaseEpoch });
+    await h.store().applyWorkflowOverlayTerminalFenced(t.id, { ...request(), expectedColumn: "in-progress", targetColumn: "in-progress" });
+    const execute = vi.fn().mockResolvedValue(undefined);
+    await resumeTaskForAgent({ store: h.store(), executing: new Set(), activeSessions: new Set(),
+      activeStepExecutors: new Set(), activeWorkflowStepSessions: new Set(),
+      listWipLaneTasks: async () => [await h.store().getTask(t.id)], taskEffectiveAgentMatches: async () => true, execute }, admission.agentId);
+    expect(execute.mock.calls.length).toBe(0);
+    const { resumeOrphaned } = await import("../../../../engine/src/executor/resume-orphaned.js");
+    const clearResumeFailureState = vi.fn().mockResolvedValue(undefined);
+    await resumeOrphaned({ store: h.store(), executing: new Set(), recoveringCompleted: new Set(), processWideGraphRouting: new Set(),
+      listWipLaneTasks: async () => [await h.store().getTask(t.id)], clearResumeFailureState,
+      recoverApprovedStepsOnResume: vi.fn().mockResolvedValue(undefined), recoverCompletedTask: vi.fn().mockResolvedValue(false), execute });
+    expect(execute.mock.calls.length).toBe(0);
+    expect(clearResumeFailureState.mock.calls.length).toBe(0);
+  });
+  it("rejects a terminal receipt without a concrete reason before changing native state", async () => {
+    const t = await task();
+    const malformed = request();
+    malformed.nextState.receipts[0].terminalBlock.reason = "";
+    await expect(h.store().applyWorkflowOverlayTerminalFenced(t.id, malformed)).resolves.toMatchObject({ applied: false, reason: "invalid-input" });
+    const unchanged = await h.store().getTask(t.id);
+    expect(unchanged.paused).toBeUndefined();
+    expect(unchanged.sourceMetadata?.procedureEngineLive).toBeUndefined();
+  });
   it("commits checkpoint and lifecycle move together and replays without another move audit", async () => {
     const t = await task();
     await expect(h.store().applyWorkflowOverlayTerminalFenced(t.id, request())).resolves.toMatchObject({ applied: true, replayed: false });
@@ -38,6 +87,7 @@ pgDescribe("workflow overlay terminal transition", () => {
       await expect(h.store().applyWorkflowOverlayTerminalFenced(t.id, request())).rejects.toMatchObject({ cause: { message: "fixture audit rejection" } });
       const unchanged = await h.store().getTask(t.id);
       expect(unchanged.column).toBe("todo"); expect(unchanged.sourceMetadata?.procedureEngineLive).toBeUndefined();
+      expect(unchanged.paused).toBeUndefined(); expect(unchanged.pausedReason).toBeUndefined();
     } finally {
       await h.adminSql().unsafe("DROP TRIGGER reject_overlay_move ON project.run_audit_events");
       await h.adminSql().unsafe("DROP FUNCTION project.reject_overlay_move()");
@@ -122,6 +172,7 @@ pgDescribe("workflow overlay terminal transition", () => {
       expect(writtenRevision).not.toBe(parentRevision);
       const unchanged = await h.store().getTask(t.id);
       expect(unchanged.column).toBe("todo"); expect(unchanged.sourceMetadata?.procedureEngineLive).toBeUndefined();
+      expect(unchanged.paused).toBeUndefined(); expect(unchanged.pausedReason).toBeUndefined();
       const rows = await h.adminSql()`SELECT transition_pending FROM project.tasks WHERE id = ${t.id}`;
       expect(rows[0].transition_pending).toBeNull();
       const audits = await h.adminSql()`SELECT count(*)::int AS n FROM project.run_audit_events WHERE mutation_type = 'task:move'`;

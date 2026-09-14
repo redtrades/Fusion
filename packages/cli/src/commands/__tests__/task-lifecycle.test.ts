@@ -2566,6 +2566,35 @@ describe("createPrNodeGithubOps repo resolution (gh-4)", () => {
     } as never)).rejects.toMatchObject({ code: "auto-merge-unavailable", message: "auto merge disabled" });
   });
 
+  it.each([false, true])("preserves an explicit head when native auto is %s", async auto => {
+    const github = githubStub();
+    const expectedHeadOid = "1111111111111111111111111111111111111111";
+    const ops = createPrNodeGithubOps(github as never, { isNativeAutoMergeEnabled: async () => auto });
+    await expect(ops.mergePr({ task: { id: "FN-native" }, entity: { id: "e1", sourceId: "FN-native", repo: "central-owner/central-repo", prNumber: 9 }, expectedHeadOid } as never)).resolves.toEqual({status:"merged-requested",headOid:expectedHeadOid});
+    expect(github.mergePr).toHaveBeenCalledExactlyOnceWith({owner:"central-owner",repo:"central-repo",number:9,method:"squash",expectedHeadOid});
+  });
+
+  it("refuses a head changed by refresh before persistence or provider merge", async () => {
+    const github = githubStub(), persistRefreshedHead = vi.fn();
+    await expect(createPrNodeGithubOps(github as never).mergePr({ entity: {id:"e1",sourceId:"FN-native",repo:"central-owner/central-repo",prNumber:9}, expectedHeadOid:"2222222222222222222222222222222222222222", persistRefreshedHead } as never)).resolves.toEqual({status:"stale-head"});
+    expect(github.mergePr).not.toHaveBeenCalled();
+    expect(persistRefreshedHead).not.toHaveBeenCalled();
+  });
+
+  it("maps a provider stale-head race without another merge request", async () => {
+    const github = githubStub(), expectedHeadOid="1111111111111111111111111111111111111111";
+    github.mergePr.mockRejectedValue(Object.assign(new Error("head moved"),{code:"stale-head"}));
+    await expect(createPrNodeGithubOps(github as never).mergePr({entity:{id:"e1",sourceId:"FN-native",repo:"central-owner/central-repo",prNumber:9},expectedHeadOid} as never)).resolves.toEqual({status:"stale-head"});
+    expect(github.mergePr).toHaveBeenCalledExactlyOnceWith({owner:"central-owner",repo:"central-repo",number:9,method:"squash",expectedHeadOid});
+  });
+
+  it.each([undefined,"1111111111111111111111111111111111111111"])("refuses cancellation during final awaited settings (head %s)", async expectedHeadOid => {
+    const github=githubStub(), controller=new AbortController();
+    const ops=createPrNodeGithubOps(github as never,{isNativeAutoMergeEnabled:async()=>{controller.abort(new Error("cancelled at final await"));return true;}});
+    await expect(ops.mergePr({task:{id:"FN-native"},entity:{id:"e1",sourceId:"FN-native",repo:"central-owner/central-repo",prNumber:9},expectedHeadOid,signal:controller.signal} as never)).rejects.toThrow("cancelled at final await");
+    expect(github.mergePr).not.toHaveBeenCalled();
+  });
+
   it("persists the refreshed workflow head before requesting GitHub merge", async () => {
     const calls: string[] = [];
     const github = githubStub();

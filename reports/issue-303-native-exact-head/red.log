@@ -1,0 +1,176 @@
+
+ RUN  v4.1.10 /Users/man/worktrees/Fusion/303-native-exact-head/packages/cli
+
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > central-install repo threading (gh-4) > threads explicit owner/repo into findPrForBranch, createPr, and mergePr on the per-task path
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > central-install repo threading (gh-4) > threads explicit owner/repo into findPrForBranch, createPr, and mergePr on the shared-branch-group path
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > pushes the per-task branch to origin before creating a new PR
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > creates shared-group PR from integration branch into default branch
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > routes shared branch-group members through group PR flow
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > falls back to per-task path when shared group row is missing
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > holds a branch-protected shared-group PR without calling mergePr
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > rejects before PR status checks when the project repository cannot be resolved
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > rejects with the named WorkspaceTaskMergeError for a workspace-mode task, before resolving the repository
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > finalizes branch group and member tasks when shared group PR is already merged
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > excludes empty member branches from group PR body
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > keeps per-task-derived members on the project default PR base
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > counts a conflicting stale-base PR against mergeRetries so the stall escape fires
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > holds a branch-protected review-required PR without a merge attempt or conflict retry
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > skips the push when an existing PR already covers the branch
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > surfaces a clear error when the pre-create push fails
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > fails before push when the task branch is missing locally and remotely
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > rethrows unexpected remote lookup failures instead of treating them as missing branches
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > skips push when the local branch is gone but the remote task branch exists
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > finalizes no-delta branches as a no-op done instead of failing
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > finalizes task cleanup when PR is already merged on status refresh
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > reconciles to done when PR merges after readiness check but before merge command completes
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > rethrows the original merge error when refresh does not confirm merged
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > reports a refreshed blocked review as policy rather than a conflict
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > reports refreshed required checks as a policy block
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > rethrows the original merge error when the post-failure refresh also fails
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > preserves PR number/url through create, refresh, and merge completion
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > requirePrApproval > holds the merge when requirePrApproval is true and reviewDecision is not APPROVED
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > requirePrApproval > merges when requirePrApproval is true and reviewDecision is APPROVED
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > requirePrApproval > preserves existing behavior when requirePrApproval is false
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > requirePrApproval > uses a scoped ingested resolver so green proceeds and failure remains awaiting checks
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > requirePrApproval > omits the resolver for a layerless or unscoped store
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > requirePrApproval > waits for a configured Fusion check, forwards normalized names, and does not merge
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > arms native auto-merge for a per-task PR without finalizing its open result
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > finalizes a per-task PR when GitHub merges native auto-merge synchronously
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > keeps the per-task head fence when native auto-merge is disabled
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > arms native auto-merge for a shared branch group without finalizing its open result
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > finalizes shared branch members when GitHub merges native auto-merge synchronously
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > processPullRequestMergeTask > keeps the shared branch head fence when native auto-merge is disabled
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > cleanupMergedTaskArtifacts FN-5455 > FN-5455: pool omitted keeps backward-compatible cleanup behavior
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > cleanupMergedTaskArtifacts FN-5455 > FN-5455: undefined worktree skips pool interaction and worktree removal
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > cleanupMergedTaskArtifacts FN-5455 > FN-5455: release errors are swallowed and cleanup continues
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > cleanupMergedTaskArtifacts FN-5455 > FN-5872: cleanup clears active-session registry entry
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > cleanupMergedTaskArtifacts FN-5455 > FN-5872: cleanup remains a no-throw best-effort when no registry entry exists
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > syncGroupPrCallback (U6) > edits the PR body when the PR is open and returns the persisted shape
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > syncGroupPrCallback (U6) > reconciles (does not edit) when the PR is closed out-of-band
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > syncGroupPrCallback (U6) > throws when the group has no persisted prNumber
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > syncGroupPrCallback (U6) > rejects with the named WorkspaceTaskMergeError when a group member is a workspace-mode task, before resolving the repository
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > syncGroupPrCallback (U6) > ticks landed members and counts only genuinely-landed ones toward the completion line
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > createGroupPrCallback > queries only OPEN PRs for the head branch (does not reuse terminal PRs)
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > createGroupPrCallback > passes the configured integration remote to the group-head refresh
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > createGroupPrCallback > fails closed when promotion is cancelled before its refresh boundary
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > createGroupPrCallback > does not reuse a closed PR from a prior group — creates a fresh one
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > createGroupPrCallback > resolves the repo from the callback cwd and threads owner/repo into findPrForBranch/createPr (gh-4)
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > createGroupPrCallback > qualifies the group PR head with the fork owner when origin pushes to a fork
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > refreshAutomatedPrHead > refuses a cancelled refresh before any git mutation
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > refreshAutomatedPrHead > cleans a worktree created during cancellation before returning the failure
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > refreshAutomatedPrHead > quarantines a retained temporary checkout when cleanup fails
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > refreshAutomatedPrHead > does not roll back a completed push when cancellation arrives after publication
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > refreshAutomatedPrHead > uses the configured integration remote rather than falling back to origin
+ ↓ src/commands/__tests__/task-lifecycle.test.ts > refreshAutomatedPrHead > materializes a remote-only head before attaching an isolated worktree
+ ✓ src/commands/__tests__/task-lifecycle.test.ts > createPrNodeGithubOps repo resolution (gh-4) > resolvePrSource resolves the repo slug from the task worktree, not process.cwd() 2ms
+ ✓ src/commands/__tests__/task-lifecycle.test.ts > createPrNodeGithubOps repo resolution (gh-4) > resolvePrSource treats the configured getTaskWorktree resolver as authoritative over task.worktree 0ms
+ ✓ src/commands/__tests__/task-lifecycle.test.ts > createPrNodeGithubOps repo resolution (gh-4) > resolvePrSource throws instead of persisting entity.repo as '' when no repo resolves (central install, no worktree) 1ms
+ ✓ src/commands/__tests__/task-lifecycle.test.ts > createPrNodeGithubOps repo resolution (gh-4) > createPr pushes from the task worktree and passes owner/repo parsed from entity.repo 4ms
+ ✓ src/commands/__tests__/task-lifecycle.test.ts > createPrNodeGithubOps repo resolution (gh-4) > qualifies the PR head with the fork owner when origin pushes to a fork 1ms
+ ✓ src/commands/__tests__/task-lifecycle.test.ts > createPrNodeGithubOps repo resolution (gh-4) > createPr uses the engine-provided configured integration remote 1ms
+ ✓ src/commands/__tests__/task-lifecycle.test.ts > createPrNodeGithubOps repo resolution (gh-4) > fails closed when workflow PR creation is cancelled 1ms
+ ✓ src/commands/__tests__/task-lifecycle.test.ts > createPrNodeGithubOps repo resolution (gh-4) > mergePr passes owner/repo parsed from entity.repo 1ms
+ ✓ src/commands/__tests__/task-lifecycle.test.ts > createPrNodeGithubOps repo resolution (gh-4) > fails closed when workflow PR merge is cancelled 1ms
+ ✓ src/commands/__tests__/task-lifecycle.test.ts > createPrNodeGithubOps repo resolution (gh-4) > resolves native auto-merge against the workflow task rather than a process-global setting 1ms
+ ✓ src/commands/__tests__/task-lifecycle.test.ts > createPrNodeGithubOps repo resolution (gh-4) > propagates unavailable native auto-merge failures from the workflow callback 2ms
+ ✓ src/commands/__tests__/task-lifecycle.test.ts > createPrNodeGithubOps repo resolution (gh-4) > preserves an explicit head when native auto is false 1ms
+ × src/commands/__tests__/task-lifecycle.test.ts > createPrNodeGithubOps repo resolution (gh-4) > preserves an explicit head when native auto is true 7ms
+   → expected "vi.fn()" to be called once with arguments: [ { owner: 'central-owner', …(4) } ]
+
+Received:
+
+  1st vi.fn() call:
+
+@@ -1,8 +1,8 @@
+  [
+    {
+-     "expectedHeadOid": "1111111111111111111111111111111111111111",
++     "auto": true,
+      "method": "squash",
+      "number": 9,
+      "owner": "central-owner",
+      "repo": "central-repo",
+    },
+
+
+Number of calls: 1
+
+ × src/commands/__tests__/task-lifecycle.test.ts > createPrNodeGithubOps repo resolution (gh-4) > refuses a head changed by refresh before persistence or provider merge 4ms
+   → expected { status: 'merged-requested', …(1) } to deeply equal { status: 'stale-head' }
+ ✓ src/commands/__tests__/task-lifecycle.test.ts > createPrNodeGithubOps repo resolution (gh-4) > maps a provider stale-head race without another merge request 2ms
+ × src/commands/__tests__/task-lifecycle.test.ts > createPrNodeGithubOps repo resolution (gh-4) > refuses cancellation during final awaited settings (head undefined) 2ms
+   → promise resolved "{ status: 'merged-requested', …(1) }" instead of rejecting
+ × src/commands/__tests__/task-lifecycle.test.ts > createPrNodeGithubOps repo resolution (gh-4) > refuses cancellation during final awaited settings (head 1111111111111111111111111111111111111111) 1ms
+   → promise resolved "{ status: 'merged-requested', …(1) }" instead of rejecting
+ ✓ src/commands/__tests__/task-lifecycle.test.ts > createPrNodeGithubOps repo resolution (gh-4) > persists the refreshed workflow head before requesting GitHub merge 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/commands/__tests__/task-lifecycle.test.ts > createPrNodeGithubOps repo resolution (gh-4) > preserves an explicit head when native auto is true
+AssertionError: expected "vi.fn()" to be called once with arguments: [ { owner: 'central-owner', …(4) } ]
+
+Received:
+
+  1st vi.fn() call:
+
+@@ -1,8 +1,8 @@
+  [
+    {
+-     "expectedHeadOid": "1111111111111111111111111111111111111111",
++     "auto": true,
+      "method": "squash",
+      "number": 9,
+      "owner": "central-owner",
+      "repo": "central-repo",
+    },
+
+
+Number of calls: 1
+
+ ❯ src/commands/__tests__/task-lifecycle.test.ts:2574:28
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  src/commands/__tests__/task-lifecycle.test.ts > createPrNodeGithubOps repo resolution (gh-4) > refuses a head changed by refresh before persistence or provider merge
+AssertionError: expected { status: 'merged-requested', …(1) } to deeply equal { status: 'stale-head' }
+
+- Expected
++ Received
+
+  {
+-   "status": "stale-head",
++   "headOid": "1111111111111111111111111111111111111111",
++   "status": "merged-requested",
+  }
+
+ ❯ src/commands/__tests__/task-lifecycle.test.ts:2579:244
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  src/commands/__tests__/task-lifecycle.test.ts > createPrNodeGithubOps repo resolution (gh-4) > refuses cancellation during final awaited settings (head undefined)
+ FAIL  src/commands/__tests__/task-lifecycle.test.ts > createPrNodeGithubOps repo resolution (gh-4) > refuses cancellation during final awaited settings (head 1111111111111111111111111111111111111111)
+AssertionError: promise resolved "{ status: 'merged-requested', …(1) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "headOid": "1111111111111111111111111111111111111111",
++   "status": "merged-requested",
+  }
+
+ ❯ src/commands/__tests__/task-lifecycle.test.ts:2594:187
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 14 passed | 61 skipped (79)
+   Start at  02:15:21
+   Duration  8.79s (transform 5.98s, setup 85ms, import 8.54s, tests 33ms, environment 0ms)
+

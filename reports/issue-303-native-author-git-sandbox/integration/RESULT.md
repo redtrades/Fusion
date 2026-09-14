@@ -1,0 +1,5 @@
+# Accepted bounded Git administration amendment
+
+Exact source162dbf117d3562bbfe41e8156483ea71776c393f, parent4800, independent Claude Sonnet5 PASS; integrated7687e1901. Root independently reproduced73 tests. Actual compiled source to installed Codex thread/start policy/identity verification PASS; exact unchanged returned sandbox then allowed a scratch add+commit with clean status while gate/TMPDIR/private-tmp writes were denied. Raw proof archived in agents docs/plans/issue-303/author-git-coordinator. No model turn or pilot change.
+
+Identity-time rederivation detects observed branch/path changes around handshake, not an atomic filesystem lock or continuous monitor. No new Git awaits after final ownership/budget ACK. Exact shared objects write allowance is not append-only protection. Source deliberately refuses unsupported layouts/operations rather than widening. No deployed runtime/full graph/PR/merge/close acceptance. Integrated build remains pending while a separately owned native startup collision probe finishes against its loaded modules.

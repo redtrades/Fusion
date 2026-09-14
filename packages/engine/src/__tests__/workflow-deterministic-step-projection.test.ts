@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { parseWorkflowIr } from "@fusion/core";
+import { runForeach } from "../workflows/workflow-graph-foreach.js";
 import type { TaskDetail, WorkflowIr, WorkflowIrNode } from "@fusion/core";
 import { WorkflowGraphExecutor } from "../workflows/workflow-graph-executor.js";
 const task = { id: "FN-det", steps: [{ name: "One", status: "pending" }] } as TaskDetail;
@@ -41,5 +43,61 @@ describe("deterministic foreach projection authority", () => {
     expect(result.outcome).toBe("failure");
     expect(states).not.toContain("completed");
     expect(command).toHaveBeenCalledTimes(refused === "start" ? 0 : 1);
+  });
+});
+
+
+describe("conditional deterministic template completion", () => {
+  function diamond(): WorkflowIrNode {
+    const templateNodes = ["select", "left", "right", "finish"].map(id => ({
+      id, kind: "script" as const, config: { scriptName: id, gateMode: "gate" },
+    }));
+    const fe: WorkflowIrNode = { id: "fe", kind: "foreach", config: {
+      source: "task-steps", mode: "sequential", isolation: "shared", template: {
+        nodes: templateNodes, edges: [
+          { from: "select", to: "left", condition: "outcome:passed" },
+          { from: "select", to: "right", condition: "outcome:failed" },
+          { from: "left", to: "finish", condition: "success" },
+          { from: "right", to: "finish", condition: "success" },
+        ],
+      },
+    } };
+    const ir = parseWorkflowIr({ version: "v2", name: "branch", columns: [{ id: "work", name: "Work", traits: [] }],
+      nodes: [{ id: "start", kind: "start" }, { id: "parse", kind: "parse-steps", config: { artifact: "PROMPT.md", parser: "markdown" } }, fe, { id: "end", kind: "end" }],
+      edges: [{ from: "start", to: "parse" }, { from: "parse", to: "fe" }, { from: "fe", to: "end", condition: "success" }],
+    });
+    return ir.nodes.find(node => node.id === "fe")!;
+  }
+  it.each(["success", "failure", "unverified", "skipped", "cancelled"] as const)("honors selected branch %s without requiring the unselected sibling", async mode => {
+    const order: string[] = [];
+    const signal = new AbortController();
+    const complete = vi.fn(async () => { order.push("done"); return true; });
+    const result = await runForeach(diamond(), {
+      task, runId: "branch-run", steps: task.steps!, context: {}, signal: signal.signal,
+      createDeterministicStepProjection: () => ({ start: async () => { order.push("start"); return true; }, complete }),
+      runTemplateNode: async node => {
+        order.push(node.id);
+        if (node.id === "left") {
+          if (mode === "cancelled") signal.abort();
+          if (mode === "failure") return { outcome: "failure", value: "failed", contextPatch: { scriptSucceeded: false } };
+          if (mode === "unverified") return { outcome: "success", value: "passed", contextPatch: { scriptSucceeded: false } };
+          if (mode === "skipped") return { outcome: "success", value: "passed", contextPatch: { scriptSucceeded: true, notRunReason: "fixture-skip" } };
+        }
+        return { outcome: "success", value: "passed", contextPatch: { scriptSucceeded: true } };
+      },
+      shouldTraverseEdge: (edge, source) => edge.condition?.startsWith("outcome:")
+        ? source.value === edge.condition.slice("outcome:".length)
+        : source.outcome === "success",
+      persistence: { saveInstanceState: state => { if (state.status === "completed") order.push("completed"); } },
+    });
+    if (mode === "success") {
+      expect(result.outcome).toBe("success");
+      expect(order).toEqual(["start", "select", "left", "finish", "done", "completed"]);
+      expect(complete).toHaveBeenCalledExactlyOnceWith(0);
+    } else {
+      expect(result.outcome).toBe("failure");
+      expect(order).toEqual(["start", "select", "left"]);
+      expect(complete).not.toHaveBeenCalled();
+    }
   });
 });

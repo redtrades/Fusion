@@ -1009,7 +1009,6 @@ async function runInstance(
       await persistInstanceState(env.persistence, { taskId: env.task.id, runId: env.runId, foreachNodeId: foreachNode.id, stepIndex, pinnedStepCount, currentNodeId: entry.id, status: "failed", reworkCount });
       return { outcome: "failure", value: "step-projection-start-refused" };
     }
-    const successfulScripts = new Set<string>();
     let currentId = entry.id;
     let lastResult: WorkflowNodeResult = { outcome: "success" };
 
@@ -1052,7 +1051,7 @@ async function runInstance(
       if (projection) {
         if (env.signal?.aborted || lastResult.outcome !== "success" || lastResult.contextPatch?.scriptSucceeded !== true || lastResult.contextPatch?.notRunReason !== undefined) {
           lastResult = { ...lastResult, outcome: "failure", value: "step-script-not-verified" };
-        } else successfulScripts.add(currentId);
+        }
       }
 
       if (lastResult.outcome === "failure") {
@@ -1076,7 +1075,7 @@ async function runInstance(
       const next = chooseNextEdge(currentId, templateOutgoing, lastResult, env.shouldTraverseEdge);
       if (!next) {
         // No outgoing edge matched → template exit reached. Instance complete.
-        if (projection && (successfulScripts.size !== templateById.size || !await projection.complete(stepIndex).catch(() => false))) {
+        if (projection && !await projection.complete(stepIndex).catch(() => false)) {
           await persistInstanceState(env.persistence, { taskId: env.task.id, runId: env.runId, foreachNodeId: foreachNode.id, stepIndex, pinnedStepCount, currentNodeId: currentId, status: "failed", reworkCount });
           return { outcome: "failure", value: "step-projection-completion-refused" };
         }

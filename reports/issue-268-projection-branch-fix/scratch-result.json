@@ -1,0 +1,45 @@
+{
+  "source": "e582139d5c352ad8fd52b7fcb27d658f1be09bc4",
+  "nativeIrValidation": "accepted",
+  "handler": "synthetic native-script-compatible passed result; no commands, DB, or inference",
+  "baseline": {
+    "result": {
+      "outcome": "success",
+      "visitedNodeIds": [
+        "fe#0:select",
+        "fe#0:left",
+        "fe#0:finish"
+      ]
+    },
+    "calls": [
+      "select",
+      "left",
+      "finish"
+    ],
+    "states": [
+      "in-progress",
+      "completed"
+    ]
+  },
+  "projected": {
+    "result": {
+      "outcome": "failure",
+      "value": "step-projection-completion-refused",
+      "visitedNodeIds": [
+        "fe#0:select",
+        "fe#0:left",
+        "fe#0:finish"
+      ]
+    },
+    "calls": [
+      "native-start",
+      "select",
+      "left",
+      "finish"
+    ],
+    "states": [
+      "in-progress",
+      "failed"
+    ]
+  }
+}

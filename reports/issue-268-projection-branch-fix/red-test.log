@@ -1,0 +1,28 @@
+
+ RUN  v4.1.10 /Users/man/worktrees/Fusion/268-projection-branch-fix/packages/engine
+
+··········x····
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |engine-default| src/__tests__/workflow-deterministic-step-projection.test.ts > conditional deterministic template completion > honors selected branch success without requiring the unselected sibling
+AssertionError: expected 'failure' to be 'success' // Object.is equality
+
+Expected: "success"
+Received: "failure"
+
+ ❯ src/__tests__/workflow-deterministic-step-projection.test.ts:94:30
+     92|     });
+     93|     if (mode === "success") {
+     94|       expect(result.outcome).toBe("success");
+       |                              ^
+     95|       expect(order).toEqual(["start", "select", "left", "finish", "don…
+     96|       expect(complete).toHaveBeenCalledExactlyOnceWith(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 14 passed (15)
+   Start at  02:35:48
+   Duration  5.39s (transform 2.81s, setup 92ms, import 5.16s, tests 14ms, environment 0ms)

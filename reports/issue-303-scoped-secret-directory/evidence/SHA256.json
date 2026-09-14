@@ -1,0 +1,14 @@
+{
+  "cleanup.json.gz": "55b88852736000735952777fdd476e4e47576ae2543b4a8e3abce1c14ac3be65",
+  "first-green-fixture-observation.log.gz": "4ec355672a41e230118f600650c4b30629599c066602a6ccdeddbcc996c48d9f",
+  "green.log.gz": "1113a40fd288485de99bc7e455b71ee2be6b7f2cbb284d1d141a9c8f567300cb",
+  "lint.log.gz": "9bee8b2d4ab28193949fdc15dc181cf56ce417de43d3af26bcdbfebd916fc5c1",
+  "master-key.config.mts.gz": "295828deed8ab1d99526ef478109ab7b579601330c0074ee0213df13f4874917",
+  "master-key.log.gz": "b9141d98d4b284b5d7267f51363c188d9999ac4bf705b6145afba78e40b114a2",
+  "red-runner-receipt.json.gz": "e79cfeaa9f9a1c3a22dbece1feb1a41b9f517b208c645eec3f6ef008f82e13d2",
+  "red.log.gz": "88aaa8af7e76e6251bac6c23a7b7bf2720bac3a950a30eedac215f959886529b",
+  "run.mjs.gz": "6d802e78997996394a3dbf2b6ce7eef4d1d27dd46cfb8b92be92de3c72858efe",
+  "runner-receipt.json.gz": "798937da4bc72bb7c58a99d683e0c0ca7d4b08fdf95c0cdbeb959c1c0cca96ae",
+  "typecheck.log.gz": "6dce031664205a780308b1a6f86118024c7fac9037bdfda3aa5437da80a0a681",
+  "vitest.config.mts.gz": "67207ef52c6a08eda79521b07aefbe63816b288167b3dc998d744f536cde8d50"
+}

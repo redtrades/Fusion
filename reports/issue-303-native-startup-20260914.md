@@ -29,3 +29,13 @@ All scratch receipts are under `/tmp/agents303-pilot-state-tmnayD/`: `pty-runtim
 Muse was asked for a bounded source-only native request-barrier seam audit. Muse reports that a registered llm_execution middleware can avoid next_call for the main path, but raising fails open, missing middleware offers no barrier, auxiliary compression bypasses it, and no supported refusal response contract exists. This is co-lead-reported source analysis pending local artifact reconciliation; it does not establish a complete budget bridge.
 
 Hermes remains the future primary swarm runtime. Grok Bot remains reserved for X research; Grok CLI is separate coding capacity. Current native pause/release work does not change those allocations or satisfy the eight pilot checks and three unattended traversals by itself.
+
+## Discovery cause and isolated trust proof
+
+Worker source inspection at Codex tag rust-v0.154.0, peeled revision `6b9826e3aa83b1a5947db50f4332cb9c65f1b340`, found config loader redirection of linked-worktree hooks to the root checkout (loader/mod.rs:1127–1137 and 1829–1852). That explains the active worktree config layer with no discovered worktree hook. No hooks were installed into the busy shared root.
+
+A standalone local clone of admitted source 6a4e977 was created at `/private/tmp/agents303-pilot-state-tmnayD/standalone-hook-proof`. It has its own Git directory and local origin. The ordinary native project-trust screen was accepted for this exact clone. In the native hook-review screen root inspected Hook 2, verified the project source, matcher startup|resume, stable Node/native-hook command and 3-second timeout, then trusted that hook individually. Native UI then showed SessionStart: 2 installed, 1 active, 1 remaining review. The four user hooks were not changed or trusted.
+
+Direct native manager proof uses taskId:null and actual isolated CliSessionStore/TelemetryHub with private context, not the KB-002 task lease. Session `cli-73d93d52` established discovery/trust, then exited cleanly. Restart `cli-507f93ea` preserved the one active Fusion hook but still produced no authenticated SessionStart event. Both had zero prompts and cleaned up child, private context, endpoint and PostgreSQL. The harness field hookTrustedByCanary=false denotes no automated trust choices; it does not negate root's recorded manual native-menu action.
+
+Receipts: `codex-standalone-manager-first-trust-receipt.json` and `codex-standalone-manager-receipt.json` under the scratch root. Discovery is fixed in this isolated layout; runtime delivery remains unproved. Next step is exact hook execution/event/environment diagnosis, not another speculative startup retry.

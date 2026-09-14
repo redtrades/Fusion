@@ -1,0 +1,18 @@
+[
+  {
+    "file": "300-hermes-ledger-root-pg.log.gz",
+    "uncompressedSha256": "822ddcab1b6847f5117237daae645f19ff0bf9424e8049b4d379a859e683c0e0"
+  },
+  {
+    "file": "300-hermes-ledger-root-unit.log.gz",
+    "uncompressedSha256": "7aaa220e5885567bcd1f852cc67ad36a81cd0881746147b02716c76f332138f0"
+  },
+  {
+    "file": "300-hermes-ledger-integrated-build.log.gz",
+    "uncompressedSha256": "be0676739c6cfbbf7a3d789738016773c063320f4d2a4ca0549ecd2e4f4596c7"
+  },
+  {
+    "file": "300-hermes-ledger-integrated-engine-typecheck.log.gz",
+    "uncompressedSha256": "8f1b391730475ccd384e48f5d10a556c1ce75590dee6f34c95a01e77a9e39dcf"
+  }
+]

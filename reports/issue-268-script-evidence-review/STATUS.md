@@ -1,7 +1,9 @@
-# Script evidence review checkpoint
+# Script evidence review and local integration
 
-A1 source0cbfe89281ed41a1147466a03dc4deefb95f61f9 remains frozen, not integrated.76 owner tests passed. Grok CLI actual attempts yielded no verdict; see raw-verdict/usage summaries. Existing HermesNous/Solarfree exact-source review is pending. Manifest names exact Git-object export paths; source bytes are available via Git, not duplicated here.
+A1 frozen source0cbfe89281ed41a1147466a03dc4deefb95f61f9 integrated as99c366879. Actual independent reviewer Nous/upstage/solar-pro4:free through Hermes returned PASS on exact Git-object source packet; raw review/usage retained. One API call,30642 reported total tokens, estimated$0, actualbillingunknown. Review did not execute tests and states scope limits. Grok CLI attempts yielded no verdict and remain recorded unchanged. Actual implementer is OpenAI/Codex despite configured Git author label.
 
-A2 native PG Reset/new-plan RED disproved prior no-extra-fence plan; Claude correction is retained unchanged. Its checkout-release log critique was confirmed by owner: undefined patch failed setup in the confirmed run. New implementation uses native null-field release and asserts absence before the stale-write reproduction. Prior logs frozen; nofalse doubledproof. Native transaction+capturedstepdefinition implementation is in another isolated tree; noA2codeintegratedyet.
+Coordinator validation on integrated99c366879:76 testsPASS,3files,0skips; core+engineTypeScript buildsPASS (exit0); gitdiffcheckPASS. No deployed/liveKB003/fullpilot claim. Existing durable sink failsoft and optional-group exclusions remain explicit.
 
-No live303/KB003 execution, DB, deployment, publicpush or reviewPASS is claimed here. Current303 premerge gap has separately assigned manualmode andexpectedhead safeguards.
+A2 realPG Reset/new-plan RED disproved prior no-extra-fence plan; Claude correction retained unchanged. Owner confirmed checkout-release secondlog failed setup dueundefinedpatch; new implementation uses supportednative null-field release and assertsabsence beforestale-write. Prior logs frozen; nofalse doubledproof. Native transaction+capturedstepdefinition implementation remains separate and notintegrated.
+
+Current303 premerge gap has separatelyassigned manualmode andexpectedhead safeguards. No actualgraph execution throughpr-merge, live4040/KB003/DB/deployment orpublicpush inthischeckpoint.

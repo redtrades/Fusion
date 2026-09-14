@@ -1,0 +1,79 @@
+{
+  "head": "ffefe982429f4103e8ae0fadbc4771a4bf9ee69f",
+  "base": "0cbfe89281ed41a1147466a03dc4deefb95f61f9",
+  "files": {
+    ".changeset/deterministic-conditional-completion.md": {
+      "sha256": "301edda1ba6a0e60691434cba0fcdd14368011f03a3e918a342f2f45b61f3ef4",
+      "gitBlob": "d21bed3eb02b875fa978898f94dde5dafb78538c",
+      "bytes": 232
+    },
+    ".changeset/protected-deterministic-step-projection.md": {
+      "sha256": "e660c43f59e28e7c47777399994e3a068f8307c3ca260f31e92235cf9c8b9443",
+      "gitBlob": "e44c7aa48bed125dcfda8613a39ef9ecaf7c042c",
+      "bytes": 264
+    },
+    "packages/core/src/__tests__/postgres/deterministic-step-projection.pg.test.ts": {
+      "sha256": "2f9e368550ce916612a0e4f05d5fc0202102f817ac7fd50eff40f32f78822116",
+      "gitBlob": "cc509b6d6bf7fe24d5fa36e6a4f8761e8169eed0",
+      "bytes": 14021
+    },
+    "packages/core/src/store.ts": {
+      "sha256": "c00ff9bc6fbd8abb249398a34a98b8753ae64543703df9857e4131f7b36544f5",
+      "gitBlob": "ebd00a817ce157c9600db8b3319a7e1d92ea0f2a",
+      "bytes": 252761
+    },
+    "packages/core/src/task-store/merge-queue-ops.ts": {
+      "sha256": "328d72ffdef3c2b314471d0c134cd4ce8e66402a7b83491217e79a9943e446dc",
+      "gitBlob": "b25d424dacabdb1458de620efd0e97d426388904",
+      "bytes": 32569
+    },
+    "packages/engine/src/__tests__/workflow-deterministic-step-projection.test.ts": {
+      "sha256": "b1d30b8904eec397571d31737b22b5df35f2de6bce5a8a03db6a1562e612eb7d",
+      "gitBlob": "bf30223c021f658f6d7ea8007406ca4c80307e2d",
+      "bytes": 7325
+    },
+    "packages/engine/src/executor/deterministic-step-projection.ts": {
+      "sha256": "c022cf5c51aadd5f93ec232e07c1c1717a02f290cfb1e202f24150adf4ba6d66",
+      "gitBlob": "54876a05547aa963387b8d6c1eaa4ae510236f52",
+      "bytes": 1220
+    },
+    "packages/engine/src/executor/execute-workflow-graph.ts": {
+      "sha256": "8e462d4dfc0e8bef83782d4576d9ab2961b818bcb44ea15ab87ef21368cb1faf",
+      "gitBlob": "c7fe5d296107f31a34214714523d8f28ab58491f",
+      "bytes": 68019
+    },
+    "packages/engine/src/workflows/workflow-graph-executor.ts": {
+      "sha256": "2b60dbe8e565cec2ee638c11d47637f77a0fb6550cc8ef648b480d05b5ae7843",
+      "gitBlob": "ccfe2a5f206e96a3253cd14ad452cdf6ec75bb83",
+      "bytes": 140720
+    },
+    "packages/engine/src/workflows/workflow-graph-foreach.ts": {
+      "sha256": "8dbaf901b0814b409e57dec878f5d9e9b7013042717e5e28e88b73069b6e3c5c",
+      "gitBlob": "d98a372914944dd9fdd9dcad68326ce97699bbed",
+      "bytes": 55156
+    },
+    "AGENTS.md": {
+      "sha256": "1a82d06f7a689cc064d684cc4bf1ddb722e084f3001a1d8d2e009f6245ef6500",
+      "gitBlob": "944b1f400912946af02012d75391da79df33d83c",
+      "bytes": 70632
+    },
+    "reports/issue-268-protected-step-projection/PLAN.md": {
+      "sha256": "804ac83faa6f7360f8f181924c744aaf38d6bb1ad06cd6c5bd9adc3e12dfade9",
+      "gitBlob": "d1f29f24bff58c1e9042c8fcf1d38e5a9a108921",
+      "bytes": 1148
+    },
+    "reports/issue-268-projection-branch-fix/PLAN.md": {
+      "sha256": "411d19a50fa5dc239db29f1197c94a1577d9e821fd32335fd0d5884a3e3f8ff8",
+      "gitBlob": "4e65770e8ef388c242be15811fac18851747a5e9",
+      "bytes": 872
+    },
+    "packages/core/src/workflows/workflow-ir.ts": {
+      "sha256": "31b7ca64b486f3f3f4344272473990e58a471fe243316cd7e1ca5238d95ef49f",
+      "gitBlob": "d121e1c3080dfad49090ddcc4b11460f359a326f",
+      "bytes": 80284
+    }
+  },
+  "promptBytes": 293229,
+  "promptSha256": "181e3bd3c7f7161b21e771f559290375f701c7f755c208550b5ee4b0b660fa73",
+  "diffSha256": "45df312e2a16bd352f7f553060dbff6c6c6e18a3edf1e5b2518fe497bc64bb81"
+}

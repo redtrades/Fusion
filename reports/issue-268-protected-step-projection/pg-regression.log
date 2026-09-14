@@ -1,0 +1,81 @@
+Isolated test database ready on ephemeral port 58850
+
+ RUN  v4.1.10 /Users/man/worktrees/Fusion/268-protected-step-projection/packages/core
+
+stderr | src/__tests__/postgres/proactive-step-status.pg.test.ts > proactive step-status chat entries (PostgreSQL) > defaults off and narrates every accepted lifecycle transition once when enabled
+<NUL>fnlvl=info<NUL>[postgres-connection] external backend resolved (DATABASE_URL set): postgresql://postgres:********@127.0.0.1:58850/fusion_schema_template_95012_goldenestworkersw9fb1z | planning lifecycle direct session: none (pooled endpoint — set DATABASE_MIGRATION_URL to a direct connection)
+
+stderr | src/__tests__/postgres/store-update-step-order.pg.test.ts > TaskStore.updateStep step-order guard (PostgreSQL)
+<NUL>fnlvl=info<NUL>[postgres-connection] external backend resolved (DATABASE_URL set): postgresql://postgres:********@127.0.0.1:58850/fusion_step_order_95021_1_loglym | planning lifecycle direct session: migration URL
+
+stderr | src/__tests__/postgres/hybrid-step-storage-contract.pg.test.ts > hybrid step storage contract (PostgreSQL)
+<NUL>fnlvl=info<NUL>[postgres-connection] external backend resolved (DATABASE_URL set): postgresql://postgres:********@127.0.0.1:58850/fusion_hybrid_steps_95022_1_vtc8y9 | planning lifecycle direct session: migration URL
+
+stderr | src/__tests__/postgres/store-update-step-order.pg.test.ts > TaskStore.updateStep step-order guard (PostgreSQL)
+<NUL>fnlvl=warn<NUL>[task-store] Patchnode reconciliation failed during backend init {
+  phase: 'init:patchnode-reconcile',
+  error: 'Patchnode requires AsyncDataLayer.projectId'
+}
+
+stderr | src/__tests__/postgres/hybrid-step-storage-contract.pg.test.ts > hybrid step storage contract (PostgreSQL)
+<NUL>fnlvl=warn<NUL>[task-store] Patchnode reconciliation failed during backend init {
+  phase: 'init:patchnode-reconcile',
+  error: 'Patchnode requires AsyncDataLayer.projectId'
+}
+
+stderr | src/__tests__/postgres/proactive-step-status.pg.test.ts > proactive step-status chat entries (PostgreSQL) > defaults off and narrates every accepted lifecycle transition once when enabled
+<NUL>fnlvl=info<NUL>[postgres-connection] external backend resolved (DATABASE_URL set): postgresql://postgres:********@127.0.0.1:58850/fusion_proactive_step_status_95024_1_4i9wrd | planning lifecycle direct session: migration URL
+
+stderr | src/__tests__/postgres/proactive-step-status.pg.test.ts > proactive step-status chat entries (PostgreSQL) > defaults off and narrates every accepted lifecycle transition once when enabled
+<NUL>fnlvl=warn<NUL>[task-store] Patchnode reconciliation failed during backend init {
+  phase: 'init:patchnode-reconcile',
+  error: 'Patchnode requires AsyncDataLayer.projectId'
+}
+
+····················stderr | src/__tests__/postgres/deterministic-step-projection.pg.test.ts > deterministic script task projection candidate
+<NUL>fnlvl=info<NUL>[postgres-connection] external backend resolved (DATABASE_URL set): postgresql://postgres:********@127.0.0.1:58850/fusion_a2_red_95020_1_xa3zzm | planning lifecycle direct session: migration URL
+
+·············x····
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/postgres/deterministic-step-projection.pg.test.ts > deterministic script task projection candidate > preserves other native columns and skips completed work on graph replay
+AssertionError: expected { id: 'KB-001', …(154) } to match object { …(3) }
+(164 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "checkoutRunId": "run-old",
+-   "sourceMetadata": {
+-     "unrelated": {
+-       "keep": true,
+-     },
+-   },
++   "sourceMetadata": undefined,
+    "summary": "Concurrent owned metadata",
+  }
+
+ ❯ src/__tests__/postgres/deterministic-step-projection.pg.test.ts:152:18
+    150|     await executor.run(task, { experimentalFeatures: { workflowGraphEx…
+    151|     const done = await store.getTask(task.id);
+    152|     expect(done).toMatchObject({ summary: "Concurrent owned metadata",…
+       |                  ^
+    153|     expect(done.steps[0].status).toBe("done");
+    154|     expect((await store.loadWorkflowRunStepInstancesAsync(task.id, "gr…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 3 passed (4)
+      Tests  1 failed | 37 passed (38)
+   Start at  02:19:13
+   Duration  8.33s (transform 10.34s, setup 446ms, import 15.52s, tests 10.05s, environment 0ms)
+
+undefined
+/Users/man/worktrees/Fusion/268-protected-step-projection/packages/core:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/__tests__/postgres/deterministic-step-projection.pg.test.ts src/__tests__/postgres/store-update-step-order.pg.test.ts src/__tests__/postgres/proactive-step-status.pg.test.ts src/__tests__/postgres/hybrid-step-storage-contract.pg.test.ts --no-file-parallelism --maxWorkers=1 --reporter=dot
+TEST_CHILD_EXIT 1 null
+BEFORE_PG_STOP_TEST_EXIT 1
+CHILD_VERDICT_EXIT 1 OUTER_NODE_EXIT 0

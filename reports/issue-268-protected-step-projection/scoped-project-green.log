@@ -1,0 +1,20 @@
+Isolated test database ready on ephemeral port 58536
+
+ RUN  v4.1.10 /Users/man/worktrees/Fusion/268-protected-step-projection/packages/core
+
+stderr | src/__tests__/postgres/deterministic-step-projection.pg.test.ts > deterministic script task projection candidate
+<NUL>fnlvl=info<NUL>[postgres-connection] external backend resolved (DATABASE_URL set): postgresql://postgres:********@127.0.0.1:58536/fusion_schema_template_93171_goldenestworkersr3idxy | planning lifecycle direct session: none (pooled endpoint — set DATABASE_MIGRATION_URL to a direct connection)
+
+stderr | src/__tests__/postgres/deterministic-step-projection.pg.test.ts > deterministic script task projection candidate
+<NUL>fnlvl=info<NUL>[postgres-connection] external backend resolved (DATABASE_URL set): postgresql://postgres:********@127.0.0.1:58536/fusion_a2_red_93178_1_spvnys | planning lifecycle direct session: migration URL
+
+···········
+
+ Test Files  1 passed (1)
+      Tests  11 passed (11)
+   Start at  02:17:13
+   Duration  7.32s (transform 3.04s, setup 81ms, import 4.94s, tests 2.18s, environment 0ms)
+
+TEST_CHILD_EXIT 0 null
+BEFORE_PG_STOP_TEST_EXIT 0
+CHILD_VERDICT_EXIT 0 OUTER_NODE_EXIT 0

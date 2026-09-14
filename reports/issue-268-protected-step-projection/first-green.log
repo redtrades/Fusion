@@ -1,0 +1,88 @@
+Isolated test database ready on ephemeral port 58385
+
+ RUN  v4.1.10 /Users/man/worktrees/Fusion/268-protected-step-projection/packages/core
+
+stderr | src/__tests__/postgres/deterministic-step-projection.pg.test.ts > deterministic script task projection candidate
+<NUL>fnlvl=info<NUL>[postgres-connection] external backend resolved (DATABASE_URL set): postgresql://postgres:********@127.0.0.1:58385/fusion_schema_template_92346_goldenestworkersiezxjr | planning lifecycle direct session: none (pooled endpoint — set DATABASE_MIGRATION_URL to a direct connection)
+
+stderr | src/__tests__/postgres/deterministic-step-projection.pg.test.ts > deterministic script task projection candidate
+<NUL>fnlvl=info<NUL>[postgres-connection] external backend resolved (DATABASE_URL set): postgresql://postgres:********@127.0.0.1:58385/fusion_a2_red_92354_1_gsfpem | planning lifecycle direct session: migration URL
+
+stderr | src/__tests__/postgres/deterministic-step-projection.pg.test.ts > deterministic script task projection candidate
+<NUL>fnlvl=warn<NUL>[task-store] Patchnode reconciliation failed during backend init {
+  phase: 'init:patchnode-reconcile',
+  error: 'Patchnode requires AsyncDataLayer.projectId'
+}
+
+x·····xxxxx
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/postgres/deterministic-step-projection.pg.test.ts > deterministic script task projection candidate > starts the native step before script execution and completes it after blocking success
+AssertionError: expected [] to deeply equal [ 'in-progress' ]
+
+- Expected
++ Received
+
+- [
+-   "in-progress",
+- ]
++ []
+
+ ❯ src/__tests__/postgres/deterministic-step-projection.pg.test.ts:38:32
+     36|     } } });
+     37|     await executor.run(task, { experimentalFeatures: { workflowGraphEx…
+     38|     expect.soft(entryStatuses).toEqual(["in-progress"]);
+       |                                ^
+     39|     expect((await h.store().getTask(task.id)).steps[0].status).toBe("d…
+     40|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  src/__tests__/postgres/deterministic-step-projection.pg.test.ts > deterministic script task projection candidate > starts the native step before script execution and completes it after blocking success
+AssertionError: expected 'pending' to be 'done' // Object.is equality
+
+Expected: "done"
+Received: "pending"
+
+ ❯ src/__tests__/postgres/deterministic-step-projection.pg.test.ts:39:64
+     37|     await executor.run(task, { experimentalFeatures: { workflowGraphEx…
+     38|     expect.soft(entryStatuses).toEqual(["in-progress"]);
+     39|     expect((await h.store().getTask(task.id)).steps[0].status).toBe("d…
+       |                                                                ^
+     40|   });
+     41|   it("native start rejects a dependent script before a command can run…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  src/__tests__/postgres/deterministic-step-projection.pg.test.ts > deterministic script task projection candidate > refuses stale native completion after reset-replan while command is in flight
+ FAIL  src/__tests__/postgres/deterministic-step-projection.pg.test.ts > deterministic script task projection candidate > refuses stale native completion after checkout-release while command is in flight
+ FAIL  src/__tests__/postgres/deterministic-step-projection.pg.test.ts > deterministic script task projection candidate > refuses stale native completion after same-lease-replaced while command is in flight
+ FAIL  src/__tests__/postgres/deterministic-step-projection.pg.test.ts > deterministic script task projection candidate > refuses stale native completion after same-lease-reordered while command is in flight
+ FAIL  src/__tests__/postgres/deterministic-step-projection.pg.test.ts > deterministic script task projection candidate > refuses stale native completion after dependsOn-empty while command is in flight
+Error: Protected graph step persistence unavailable
+ ❯ mutateProtectedGraphStep src/task-store/merge-queue-ops.ts:404:32
+    402|   const policyOptions = { ...options, ownership, expectedSteps };
+    403|   const layer = store.asyncLayer;
+    404|   if (!layer?.projectId) throw new Error("Protected graph step persist…
+       |                                ^
+    405|   const assertActive = () => { if (signal.aborted) throw new Error("Pr…
+    406|   assertActive();
+ ❯ mutateStepImpl src/task-store/merge-queue-ops.ts:362:30
+ ❯ startStepImpl src/task-store/merge-queue-ops.ts:447:24
+ ❯ TaskStore.startStep src/store.ts:2754:12
+ ❯ src/__tests__/postgres/deterministic-step-projection.pg.test.ts:68:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  6 failed | 5 passed (11)
+   Start at  02:16:16
+   Duration  7.22s (transform 3.08s, setup 105ms, import 5.01s, tests 1.99s, environment 0ms)
+
+undefined
+/Users/man/worktrees/Fusion/268-protected-step-projection/packages/core:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/__tests__/postgres/deterministic-step-projection.pg.test.ts --reporter=dot
+TEST_CHILD_EXIT 1 null
+BEFORE_PG_STOP_TEST_EXIT 1

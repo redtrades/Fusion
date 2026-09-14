@@ -414,6 +414,7 @@ export interface WorkflowGraphExecutorDeps {
   resumeReconcile?: ForeachEnvironment["resumeReconcile"];
   /** FIX 4 (context gap): task-level log sink for integration-conflict rework. */
   logTaskEntry?: ForeachEnvironment["logTaskEntry"];
+  createDeterministicStepProjection?: ForeachEnvironment["createDeterministicStepProjection"];
   /*
    * FNXC:WorkflowStepResults 2026-06-25-12:00:
    * Fail-soft persistence sink for an ENABLED optional-group node's outcome
@@ -980,6 +981,7 @@ export class WorkflowGraphExecutor {
             runId,
             steps,
             getLiveSteps: () => this.resolveTaskSteps(task),
+            createDeterministicStepProjection: this.deps.createDeterministicStepProjection,
             context,
             runTemplateNode: (tNode, sig, contextOverride) =>
               this.executeMaterializedTemplateNode(tNode, task, settings, contextOverride ?? context, ir, sig),

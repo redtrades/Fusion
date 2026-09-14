@@ -1,0 +1,5 @@
+# Approved A2 implementation
+
+Base A1 0cbfe89281ed41a1147466a03dc4deefb95f61f9, new isolated branch. Parent authorized protected graph-only step options: exact checkout tuple, ordered expectedSteps definitions (all fields except status), signal. Preserve absent dependsOn versus []; completion requires current in-progress. Extract one shared transition policy; protected write uses existing task/advisory/row transaction and owned fields, legacy path unchanged. No nested store mutations inside transaction. Only shared/sequential all-script blocking foreach may use the new callback; actual success and no skipped check required.
+
+RED-first: copied frozen RED tests, corrected release premise to native null fields + incremented epoch (mesh-lease-manager existing path); initial undefined patch was not a release and prior claims are corrected. Add same-lease replaced/reordered/dependsOn-empty plans before GREEN. Expanded RED: 6 failed/5 passed, child exit1. No production code had changed. Parent approved core/engine scope; A1/RED commits remain immutable. No inference, live DB/task, auth, public push or services outside ephemeral test PG.

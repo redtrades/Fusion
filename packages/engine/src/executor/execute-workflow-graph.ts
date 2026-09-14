@@ -1,3 +1,4 @@
+import { createDeterministicStepProjection } from "./deterministic-step-projection.js";
 /**
  * FNXC:CodeOrganization 2026-08-03-14:30:
  * executeWorkflowGraph peeled from TaskExecutor (U4).
@@ -949,6 +950,7 @@ export async function executeWorkflowGraph(
         branchPersistence: deps.buildBranchPersistence(),
         // Step-inversion (KTD-6, U3/U4): per-instance run-state persistence.
         stepInstancePersistence: deps.buildStepInstancePersistence(),
+        createDeterministicStepProjection: (nodeTask: TaskDetail, steps: TaskDetail["steps"], signal: AbortSignal) => createDeterministicStepProjection(deps.store, nodeTask, steps, signal),
         // Step-inversion (KTD-4, U5): RETHINK reset-on-rework — when the foreach
         // sub-walk traverses a rework edge triggered by `outcome:rethink`, reset
         // the active instance's step to its persisted per-step baseline (git reset

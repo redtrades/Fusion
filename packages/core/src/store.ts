@@ -2746,11 +2746,11 @@ export class TaskStore extends EventEmitter<TaskStoreEvents> {
     return EventEmitter.prototype.emit.call(this, event as string, ...args);
   }
 
-  async updateStep( id: string, stepIndex: number, status: import("./types.js").StepStatus, options?: { source?: "graph"; summary?: string; operatorOverride?: boolean }, ): Promise<Task> {
+  async updateStep( id: string, stepIndex: number, status: import("./types.js").StepStatus, options?: import("./task-store/merge-queue-ops.js").StepMutationOptions, ): Promise<Task> {
     return updateStepImpl(this, id, stepIndex, status, options);
   }
   // FNXC:StepLifecycle 2026-07-22-10:30: Execution callers need the locked start verdict; updateStep retains its legacy Task-only contract.
-  async startStep( id: string, stepIndex: number, options?: { source?: "graph" }, ): Promise<import("./task-store/merge-queue-ops.js").StepStartResult> {
+  async startStep( id: string, stepIndex: number, options?: import("./task-store/merge-queue-ops.js").StepMutationOptions, ): Promise<import("./task-store/merge-queue-ops.js").StepStartResult> {
     return startStepImpl(this, id, stepIndex, options);
   }
   async checkAndRecordUnplannedExecutionBlock(id: string, episode: string): Promise<boolean> {

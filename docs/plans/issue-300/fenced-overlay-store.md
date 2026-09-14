@@ -4,9 +4,9 @@ Scope: A3, under the coordinator's issue 300 implementation authorization. Evide
 
 ## Contract
 
-`TaskStore.updateWorkflowOverlayStateFenced(taskId, input)` accepts `admission: {runId, leaseEpoch, agentId, nodeId}`, `expectedPhaseCount`, `operationId`, and `nextState: {phaseCount, previousEnvelope, reviewedHeadOid, receipts}`. The next state appends exactly one receipt without changing the receipt prefix. All input is owned JSON before an asynchronous boundary; unknown state/admission fields and lossy values are rejected.
+`TaskStore.updateWorkflowOverlayStateFenced(taskId, input)` accepts `admission: {runId, leaseEpoch, agentId, nodeId}`, `expectedPhaseCount`, `operationId`, and `nextState: {runId, claimId, occurrence, phaseCount, previousEnvelope, reviewedHeadOid, receipts}`. The checkpoint runId is the graph run, distinct from admission.runId (native checkout ownership). claimId remains immutable within that graph run; occurrence is a monotonic accepted-phase count bounded by phaseCount. The next state appends exactly one receipt without changing the receipt prefix. All input is owned JSON before an asynchronous boundary; unknown state/admission fields and lossy values are rejected.
 
-Storage is `task.sourceMetadata.procedureEngineLive.runs[runId]`. Each checkpoint also stores `writeFence: {admission, operationId, expectedPhaseCount}`. Other runs and source metadata are preserved. The namespace permits at most 256 phases across all runs and 1 MiB serialized bytes; exhaustion refuses rather than evicts evidence.
+Storage is `task.sourceMetadata.procedureEngineLive.runs[graphRunId]`. Each checkpoint also stores `writeFence: {admission, operationId, expectedPhaseCount}`. Other runs and source metadata are preserved. The namespace permits at most 256 phases across all runs and 1 MiB serialized bytes; exhaustion refuses rather than evicts evidence.
 
 The project-bound PostgreSQL transaction takes the same advisory task lock as Reset, then the task row lock. It rejects missing/deleted rows and mismatched `checkedOutBy`, `checkoutNodeId`, `checkoutRunId`, or `checkoutLeaseEpoch`. A new run can initialize its own checkpoint after valid admission. A valid replacement lease for the same run can append or replay, without rewriting earlier receipt provenance. An old lease is refused before replay checks.
 
@@ -14,7 +14,7 @@ The acknowledgement is `{applied:true, task, state, replayed}` or `{applied:fals
 
 ## Verification
 
-The new PostgreSQL suite initially failed on the missing method. Ten tests now execute against an isolated local PostgreSQL cluster: separate store contention, Reset/write ordering, stale lease refusal, same-run takeover, Reset/new-run history preservation, exact replay, projection-failure retry, receipt prefix preservation, malformed/oversized payload refusal, and missing/deleted/unavailable storage. Core TypeScript and scoped production ESLint pass. No shared database, service, inference, or public remote was used.
+The new PostgreSQL suite initially failed on the missing method. Eleven tests now execute against an isolated local PostgreSQL cluster: separate store contention, Reset/write ordering, stale lease refusal, same-run takeover, Reset/new-run history preservation, exact replay, projection-failure retry, receipt prefix preservation, malformed/oversized payload refusal, missing/deleted/unavailable storage, distinct graph/checkout identifiers, and two graph runs under one checkout. The Reset test observes an actual PostgreSQL advisory-lock waiter from a separate TaskStore. Core TypeScript and scoped production ESLint pass. No shared database, service, inference, or public remote was used.
 
 ## Remaining scope and negative evidence
 

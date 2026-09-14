@@ -423,40 +423,86 @@ export type WorkflowOverlayStateWriteResult =
   | { applied: false; reason: "unavailable" | "invalid-input" | "task-missing" | "task-deleted"
       | "ownership-mismatch" | "revision-mismatch" | "invalid-checkpoint" };
 
-type StoredWorkflowOverlayState = WorkflowOverlayState & {
-  writeFence: { admission: WorkflowOverlayAdmission; operationId: string; expectedPhaseCount: number };
+export type StoredWorkflowOverlayState = WorkflowOverlayState & {
+  writeFence: { admission: WorkflowOverlayAdmission; operationId: string; expectedPhaseCount: number;
+    terminal?: { targetColumn: string; expectedColumn: string; fullTransactionId: string; rowRevision: string }; };
 };
 
-export async function updateWorkflowOverlayStateFencedImpl(
-  store: TaskStore,
-  id: string,
-  input: WorkflowOverlayStateWrite,
-): Promise<WorkflowOverlayStateWriteResult> {
-  const layer = store.asyncLayer;
-  if (!layer?.projectId) return { applied: false, reason: "unavailable" };
+const overlayRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
+
+/** @internal Own and validate a bounded JSON request before taking native locks. */
+export function ownWorkflowOverlayStateWrite(input: WorkflowOverlayStateWrite): WorkflowOverlayStateWrite | undefined {
   // FNXC:WorkflowOverlay 2026-09-14-01:26: Own JSON values before awaiting any lock; reject lossy serialization and bound durable growth.
   let request: WorkflowOverlayStateWrite;
   try {
     const json = JSON.stringify(input);
-    if (Buffer.byteLength(json, "utf8") > WORKFLOW_OVERLAY_MAX_BYTES) return { applied: false, reason: "invalid-input" };
+    if (Buffer.byteLength(json, "utf8") > WORKFLOW_OVERLAY_MAX_BYTES) return undefined;
     request = JSON.parse(json) as WorkflowOverlayStateWrite;
-    if (!isDeepStrictEqual(input, request)) return { applied: false, reason: "invalid-input" };
-  } catch { return { applied: false, reason: "invalid-input" }; }
+    if (!isDeepStrictEqual(input, request)) return undefined;
+  } catch { return undefined; }
+  if (!overlayRecord(request)) return undefined;
   const { admission, expectedPhaseCount, operationId, nextState } = request;
-  const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
-  if (!record(admission) || !record(nextState)
+  if (!overlayRecord(admission) || !overlayRecord(nextState)
       || ![admission.runId, admission.agentId, admission.nodeId, operationId, nextState.runId, nextState.claimId].every(v => typeof v === "string" && v.trim().length > 0 && v.length <= 256)
       || !Number.isSafeInteger(admission.leaseEpoch) || admission.leaseEpoch < 0
       || !Number.isSafeInteger(expectedPhaseCount) || expectedPhaseCount < 0 || expectedPhaseCount >= WORKFLOW_OVERLAY_MAX_PHASES
       || !Number.isSafeInteger(nextState.occurrence) || nextState.occurrence < 0 || nextState.occurrence > nextState.phaseCount
       || nextState.phaseCount !== expectedPhaseCount + 1
-      || !Array.isArray(nextState.receipts) || nextState.receipts.length !== nextState.phaseCount || !nextState.receipts.every(record)
-      || !(nextState.previousEnvelope === null || record(nextState.previousEnvelope))
+      || !Array.isArray(nextState.receipts) || nextState.receipts.length !== nextState.phaseCount || !nextState.receipts.every(overlayRecord)
+      || !(nextState.previousEnvelope === null || overlayRecord(nextState.previousEnvelope))
       || !(nextState.reviewedHeadOid === null || typeof nextState.reviewedHeadOid === "string")
       || Object.keys(nextState).some(key => !["runId", "claimId", "occurrence", "phaseCount", "previousEnvelope", "reviewedHeadOid", "receipts"].includes(key))
       || Object.keys(admission).some(key => !["runId", "leaseEpoch", "agentId", "nodeId"].includes(key))) {
+    return undefined;
+  }
+  return request;
+}
+
+/** @internal Synchronous, field-bounded computation shared by checkpoint and native move transactions. */
+export function prepareWorkflowOverlayStateWrite(current: Task, request: WorkflowOverlayStateWrite): WorkflowOverlayStateWriteResult {
+  const { admission, expectedPhaseCount, operationId, nextState } = request;
+  if (current.checkoutRunId !== admission.runId || current.checkoutLeaseEpoch !== admission.leaseEpoch
+      || current.checkedOutBy !== admission.agentId || current.checkoutNodeId !== admission.nodeId) {
+    return { applied: false, reason: "ownership-mismatch" };
+  }
+  const namespace = current.sourceMetadata?.procedureEngineLive;
+  if (namespace !== undefined && (!overlayRecord(namespace) || !overlayRecord(namespace.runs))) return { applied: false, reason: "invalid-checkpoint" };
+  const runs = (namespace as { runs: Record<string, StoredWorkflowOverlayState> } | undefined)?.runs ?? {};
+  let totalPhases = 0;
+  for (const prior of Object.values(runs)) {
+    if (!overlayRecord(prior) || !Number.isSafeInteger(prior.phaseCount) || prior.phaseCount < 1
+        || !Array.isArray(prior.receipts) || prior.receipts.length !== prior.phaseCount) return { applied: false, reason: "invalid-checkpoint" };
+    totalPhases += prior.phaseCount;
+  }
+  const stored = Object.hasOwn(runs, nextState.runId) ? runs[nextState.runId] : undefined;
+  if (stored !== undefined) {
+    if (!overlayRecord(stored) || !overlayRecord(stored.writeFence) || !Array.isArray(stored.receipts)
+        || !Number.isSafeInteger(stored.phaseCount) || stored.phaseCount !== stored.receipts.length) {
+      return { applied: false, reason: "invalid-checkpoint" };
+    }
+    if (stored.runId !== nextState.runId || stored.claimId !== nextState.claimId || !Number.isSafeInteger(stored.occurrence) || stored.occurrence > nextState.occurrence) return { applied: false, reason: "invalid-checkpoint" };
+    const { writeFence, ...state } = stored;
+    if (writeFence.operationId === operationId && writeFence.expectedPhaseCount === expectedPhaseCount && isDeepStrictEqual(state, nextState)) {
+      return { applied: true, task: current, state, replayed: true };
+    }
+    if (stored.phaseCount !== expectedPhaseCount || writeFence.operationId === operationId) return { applied: false, reason: "revision-mismatch" };
+    if (!isDeepStrictEqual(stored.receipts, nextState.receipts.slice(0, expectedPhaseCount))) return { applied: false, reason: "invalid-checkpoint" };
+  } else if (expectedPhaseCount !== 0) return { applied: false, reason: "revision-mismatch" };
+  const checkpoint: StoredWorkflowOverlayState = { ...nextState, writeFence: { admission, operationId, expectedPhaseCount } };
+  const nextNamespace = { runs: { ...runs, [nextState.runId]: checkpoint } };
+  if (totalPhases >= WORKFLOW_OVERLAY_MAX_PHASES || Buffer.byteLength(JSON.stringify(nextNamespace), "utf8") > WORKFLOW_OVERLAY_MAX_BYTES) {
     return { applied: false, reason: "invalid-input" };
   }
+  return { applied: true, task: { ...current, sourceMetadata: { ...current.sourceMetadata, procedureEngineLive: nextNamespace } }, state: nextState, replayed: false };
+}
+
+export async function updateWorkflowOverlayStateFencedImpl(
+  store: TaskStore, id: string, input: WorkflowOverlayStateWrite,
+): Promise<WorkflowOverlayStateWriteResult> {
+  const layer = store.asyncLayer;
+  if (!layer?.projectId) return { applied: false, reason: "unavailable" };
+  const request = ownWorkflowOverlayStateWrite(input);
+  if (!request) return { applied: false, reason: "invalid-input" };
   return store.withTaskLock(id, async () => {
     const outcome = await layer.transactionImmediate(async (tx): Promise<WorkflowOverlayStateWriteResult> => {
       await acquireTaskAdvisoryXactLock(tx, layer.projectId, id);
@@ -465,45 +511,13 @@ export async function updateWorkflowOverlayStateFencedImpl(
       const row = await readTaskRowInTransaction(tx, id, { includeDeleted: true }, layer.projectId);
       if (!row) return { applied: false, reason: "task-missing" };
       if (row.deletedAt) return { applied: false, reason: "task-deleted" };
-      const current = store.rowToTask(store.pgRowToTaskRow(row));
-      if (current.checkoutRunId !== admission.runId || current.checkoutLeaseEpoch !== admission.leaseEpoch
-          || current.checkedOutBy !== admission.agentId || current.checkoutNodeId !== admission.nodeId) {
-        return { applied: false, reason: "ownership-mismatch" };
-      }
-      const namespace = current.sourceMetadata?.procedureEngineLive;
-      if (namespace !== undefined && (!record(namespace) || !record(namespace.runs))) return { applied: false, reason: "invalid-checkpoint" };
-      const runs = (namespace as { runs: Record<string, StoredWorkflowOverlayState> } | undefined)?.runs ?? {};
-      let totalPhases = 0;
-      for (const prior of Object.values(runs)) {
-        if (!record(prior) || !Number.isSafeInteger(prior.phaseCount) || prior.phaseCount < 1
-            || !Array.isArray(prior.receipts) || prior.receipts.length !== prior.phaseCount) return { applied: false, reason: "invalid-checkpoint" };
-        totalPhases += prior.phaseCount;
-      }
-      const stored = Object.hasOwn(runs, nextState.runId) ? runs[nextState.runId] : undefined;
-      if (stored !== undefined) {
-        if (!record(stored) || !record(stored.writeFence) || !Array.isArray(stored.receipts)
-            || !Number.isSafeInteger(stored.phaseCount) || stored.phaseCount !== stored.receipts.length) {
-          return { applied: false, reason: "invalid-checkpoint" };
-        }
-        if (stored.runId !== nextState.runId || stored.claimId !== nextState.claimId || !Number.isSafeInteger(stored.occurrence) || stored.occurrence > nextState.occurrence) return { applied: false, reason: "invalid-checkpoint" };
-        const { writeFence, ...state } = stored;
-        if (writeFence.operationId === operationId && writeFence.expectedPhaseCount === expectedPhaseCount && isDeepStrictEqual(state, nextState)) {
-          return { applied: true, task: current, state, replayed: true };
-        }
-        if (stored.phaseCount !== expectedPhaseCount || writeFence.operationId === operationId) return { applied: false, reason: "revision-mismatch" };
-        if (!isDeepStrictEqual(stored.receipts, nextState.receipts.slice(0, expectedPhaseCount))) return { applied: false, reason: "invalid-checkpoint" };
-      } else if (expectedPhaseCount !== 0) return { applied: false, reason: "revision-mismatch" };
-      const checkpoint: StoredWorkflowOverlayState = { ...nextState, writeFence: { admission, operationId, expectedPhaseCount } };
-      const nextNamespace = { runs: { ...runs, [nextState.runId]: checkpoint } };
-      if (totalPhases >= WORKFLOW_OVERLAY_MAX_PHASES || Buffer.byteLength(JSON.stringify(nextNamespace), "utf8") > WORKFLOW_OVERLAY_MAX_BYTES) {
-        return { applied: false, reason: "invalid-input" };
-      }
+      const prepared = prepareWorkflowOverlayStateWrite(store.rowToTask(store.pgRowToTaskRow(row)), request);
+      if (!prepared.applied || prepared.replayed) return prepared;
       const [updated] = await tx.update(schema.project.tasks).set({
-        sourceMetadata: { ...current.sourceMetadata, procedureEngineLive: nextNamespace },
-        updatedAt: new Date().toISOString(),
+        sourceMetadata: prepared.task.sourceMetadata, updatedAt: new Date().toISOString(),
       }).where(and(eq(schema.project.tasks.id, id), taskProjectScope(layer), isNull(schema.project.tasks.deletedAt))).returning();
       if (!updated) return { applied: false, reason: "task-missing" };
-      return { applied: true, task: store.rowToTask(store.pgRowToTaskRow(updated)), state: nextState, replayed: false };
+      return { ...prepared, task: store.rowToTask(store.pgRowToTaskRow(updated)) };
     });
     if (outcome.applied && !outcome.replayed) {
       await store.writeTaskJsonFile(store.taskDir(id), outcome.task);

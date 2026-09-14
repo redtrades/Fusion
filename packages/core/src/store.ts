@@ -1,3 +1,4 @@
+import { applyWorkflowOverlayTerminalFencedImpl } from "./task-store/moves.js";
 import { EventEmitter } from "node:events";
 import type { TaskMoveLanes } from "./workflows/workflow-lifecycle-traits.js";
 import { TaskLaneCache } from "./task-lane-cache.js";
@@ -352,6 +353,13 @@ export interface MoveTaskOptions {
 /** @internal Extracted to task-store/moves.ts */
 export interface MoveTaskInternalOptions {
   fromHandoff: boolean;
+  /** @internal Checkpoint and move are checked again in the lifecycle transaction. */
+  workflowOverlayTerminal?: {
+    request: import("./task-store/task-mutation-ops.js").WorkflowOverlayStateWrite;
+    expectedColumn: string;
+    targetColumn: string;
+    expectedRowRevision: string;
+  };
   /** @internal Fence-validated inside moveTaskInternal's transaction for terminal-failure recovery. */
   terminalFailureApply?: {
     applyToken: string;
@@ -2228,6 +2236,11 @@ export class TaskStore extends EventEmitter<TaskStoreEvents> {
   async appendRemediationSteps(taskId: string, steps: readonly TaskStep[], options?: AppendRemediationStepsOptions): Promise<AppendRemediationStepsResult> {
     return appendRemediationStepsImpl(this, taskId, steps, options);
   }
+  /** FNXC:WorkflowOverlay 2026-09-14-01:40: Persist terminal receipt and its native lifecycle move atomically. */
+  async applyWorkflowOverlayTerminalFenced(id: string, input: import("./task-store/moves.js").WorkflowOverlayTerminalWrite): Promise<import("./task-store/moves.js").WorkflowOverlayTerminalResult> {
+    return applyWorkflowOverlayTerminalFencedImpl(this, id, input);
+  }
+
   /** FNXC:WorkflowOverlay 2026-09-14-01:26: Publish one run-owned overlay receipt through the Reset-fenced native store. */
   async updateWorkflowOverlayStateFenced(
     id: string,

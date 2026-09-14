@@ -1,3 +1,4 @@
+import { recordCliTokenUsageFencedImpl, type CliTokenUsageWrite, type CliTokenUsageAck } from "./task-store/cli-token-usage-ops.js";
 import { applyWorkflowOverlayTerminalFencedImpl } from "./task-store/moves.js";
 import { EventEmitter } from "node:events";
 import type { TaskMoveLanes } from "./workflows/workflow-lifecycle-traits.js";
@@ -2230,6 +2231,10 @@ export class TaskStore extends EventEmitter<TaskStoreEvents> {
   async markToolFailureRetryExhaustedAudit(taskId: string): Promise<boolean> {
     return markToolFailureRetryExhaustedAuditImpl(this, taskId);
   }
+  async recordCliTokenUsageFenced(id: string, input: CliTokenUsageWrite): Promise<CliTokenUsageAck> {
+    return recordCliTokenUsageFencedImpl(this, id, input);
+  }
+
   async updateTaskAtomic( id: string, updater: ( current: Task, ) => Parameters<TaskStore["updateTask"]>[1] | null | undefined | Promise<Parameters<TaskStore["updateTask"]>[1] | null | undefined>, runContext?: RunMutationContext, ): Promise<Task> {
     return updateTaskAtomicImpl(this, id, updater, runContext);
   }

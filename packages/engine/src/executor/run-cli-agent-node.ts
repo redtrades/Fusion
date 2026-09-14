@@ -1,9 +1,11 @@
+import { getTokenBudgetUsage, resolveTaskTokenBudget } from "../concurrency/token-budget-enforcer.js";
+import type { CliUsageProtection } from "../cli-agent/token-usage-observer.js";
 /**
  * FNXC:CodeOrganization 2026-08-03-11:25:
  * runCliAgentNode + reapCliTaskSessionForHandoff peeled from TaskExecutor (U4).
  * CLI agent graph node: launch PTY session, map outcomes to WorkflowNodeResult.
  */
-import type { CliSessionStore, TaskDetail, TaskStore, WorkflowIrNode } from "@fusion/core";
+import type { CliSessionStore, ProjectSettings, TaskDetail, TaskStore, WorkflowIrNode } from "@fusion/core";
 import type { WorkflowNodeResult } from "../workflows/workflow-graph-executor.js";
 import { executorLog } from "../logger.js";
 import type { EngineRunContext } from "../util/run-audit.js";
@@ -75,6 +77,16 @@ export async function runCliAgentNode(
     return { outcome: "failure", value: "cli-agent-adapter-missing" };
   }
 
+  const settings = await deps.store.getSettingsByScope();
+  const current = await deps.store.getTask(live.id);
+  const limits = resolveTaskTokenBudget(current, settings.project as ProjectSettings, settings.global);
+  let usageProtection: CliUsageProtection | undefined;
+  if (limits.hard !== undefined) {
+    if (!Number.isSafeInteger(limits.hard) || limits.hard < 0 || getTokenBudgetUsage(current.tokenUsage) >= limits.hard) return { outcome: "failure", value: "cli-agent-token-budget-exhausted" };
+    const run = deps.getRunContextFor(live.id);
+    if (!run || current.checkoutRunId !== run.runId || current.checkedOutBy !== run.agentId || !current.checkoutNodeId || !current.checkoutLeaseEpoch) return { outcome: "failure", value: "cli-agent-token-budget-admission-unavailable" };
+    usageProtection = { store: deps.store, sessions: runtime.store, limits, admission: { runId: run.runId, agentId: run.agentId, nodeId: current.checkoutNodeId, leaseEpoch: current.checkoutLeaseEpoch } };
+  }
   const prompt = typeof cfg.prompt === "string" ? cfg.prompt : (live.prompt ?? "");
 
   // Re-entry: kill any prior LIVE session for this task (RETHINK/replan context
@@ -84,6 +96,7 @@ export async function runCliAgentNode(
   let session: CliTaskSession;
   try {
     session = await launchCliTaskSession({
+      usageProtection,
       taskId: live.id,
       projectId: runtime.projectId,
       worktreePath,

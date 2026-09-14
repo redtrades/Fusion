@@ -56,6 +56,22 @@ describe("PluginLoader native session reader lifecycle", () => {
     expect(read).toHaveBeenCalledTimes(1);
   });
 
+  it("late-resolves native accounting capability and revokes it with the participant", async () => {
+    const f = await fixture();
+    const management = f.create();
+    const inspect = vi.fn(async () => ({ protocol: "native-cli-observed-v1", hardLimit: 10, observedWorkTokens: 0, launchGate: "authenticated-identity-before-prompt" }));
+    const execution = f.create({ readCliTokenBudget: inspect as any });
+    await management.loadPlugin("reader");
+    const context = (management.getPlugin("reader") as any).captured as PluginContext;
+    const input = { taskId: "task", adapterId: "codex" as const, admission: { runId: "run", leaseEpoch: 1, agentId: "agent", nodeId: "host" } };
+    await expect(context.readCliTokenBudget!(input)).rejects.toThrow("unavailable");
+    await execution.loadPlugin("reader");
+    await expect(context.readCliTokenBudget!(input)).resolves.toMatchObject({ protocol: "native-cli-observed-v1" });
+    expect(inspect).toHaveBeenCalledWith(input);
+    await execution.stopPlugin("reader");
+    await expect(context.readCliTokenBudget!(input)).rejects.toThrow("unavailable");
+  });
+
   it("refuses two different execution readers instead of selecting an owner arbitrarily", async () => {
     const f = await fixture();
     const management = f.create();

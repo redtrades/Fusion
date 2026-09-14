@@ -1,0 +1,49 @@
+{
+  "provenance": "Usage-only extraction from this Codex thread and newest agents-project Claude transcript; message identifiers replaced, no message content copied. Examples are versioned observed events, not official rollout schema guarantees.",
+  "codexVersion": "0.154.0-alpha.6.2",
+  "claudeVersion": "2.1.266",
+  "codex": {
+    "type": "event_msg",
+    "payload": {
+      "type": "token_count",
+      "info": {
+        "total_token_usage": {
+          "input_tokens": 61792456,
+          "cached_input_tokens": 60634496,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 107055,
+          "reasoning_output_tokens": 33153,
+          "total_tokens": 61899511
+        },
+        "last_token_usage": {
+          "input_tokens": 154227,
+          "cached_input_tokens": 148864,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 185,
+          "reasoning_output_tokens": 69,
+          "total_tokens": 154412
+        },
+        "model_context_window": 258400
+      }
+    }
+  },
+  "claude": {
+    "type": "assistant",
+    "message": {
+      "id": "fixture-message-1",
+      "usage": {
+        "input_tokens": 2,
+        "cache_creation_input_tokens": 3113,
+        "cache_read_input_tokens": 440378,
+        "output_tokens": 1131,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 3113,
+          "ephemeral_5m_input_tokens": 0
+        }
+      }
+    }
+  }
+}

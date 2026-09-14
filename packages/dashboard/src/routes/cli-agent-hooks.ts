@@ -51,6 +51,7 @@ const SESSION_HEADER = "x-fusion-cli-session-id";
 
 /** The minimal hub surface the route depends on (validate + ingest). */
 export interface CliAgentHookHub {
+  ingestNativeSessionStart?: (sessionId: string, identity: { nativeSessionId: string; transcriptPath: string }) => void;
   validateToken(sessionId: string, token: string | null | undefined): boolean;
   ingest(sessionId: string, event: unknown): unknown;
 }
@@ -84,8 +85,11 @@ function headerValue(req: Request, name: string): string | undefined {
  * generic activity signal, so an unrecognized hook never advances state on its own
  * (positive completion gating lives in the state machine, not here).
  */
-function normalizeHookEvent(eventName: string | undefined, body: Record<string, unknown>) {
-  const name = (eventName ?? "").toLowerCase();
+export function normalizeHookEvent(eventName: string | undefined, body: Record<string, unknown>) {
+  const name = (eventName ?? (typeof body.hook_event_name === "string" ? body.hook_event_name : "")).toLowerCase();
+  if (name === "notify" && body.type === "agent-turn-complete" && typeof body["thread-id"] === "string") {
+    return { kind: "done" as const, payload: { nativeSessionId: body["thread-id"] } };
+  }
   // Carry the native session id whenever the payload reports one (Claude:
   // `session_id` in every payload) so the hub can persist it.
   const nativeSessionId =
@@ -192,6 +196,9 @@ export const registerCliAgentHooksRoute: ApiRouteRegistrar = (ctx) => {
 
     try {
       // ingest is itself a no-op for unknown/non-live sessions — never crashes.
+      if (event.kind === "sessionStart" && typeof body.session_id === "string" && typeof body.transcript_path === "string") {
+        hub.ingestNativeSessionStart?.(sessionId, { nativeSessionId: body.session_id, transcriptPath: body.transcript_path });
+      }
       hub.ingest(sessionId, event);
     } catch (error) {
       // Telemetry ingestion is best-effort. Log and still return 200 so the

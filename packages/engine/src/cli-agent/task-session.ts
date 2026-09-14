@@ -9,7 +9,7 @@
  *   1. Spawn a CLI session in the task worktree (CliSessionManager.spawn). A
  *      CliConcurrencyLimitError at the ceiling is propagated as a typed error
  *      (the seam surfaces it as a queued/rejected task state — never a stall).
- *   2. Mint the per-session hook token (TelemetryHub.issueToken) and write the
+ *   2. Before PTY startup, mint the hook token (TelemetryHub.issueToken) and write the
  *      session-scoped hook scripts (writeSessionHookScripts) into a scratch dir.
  *   3. Build the adapter launch settings (the Claude adapter consumes the written
  *      hook-script paths via its settings flow). NOTE: the launch invocation is
@@ -41,9 +41,11 @@
  * telemetry sink; the dashboard route (U17) forwards validated hook POSTs into it.
  */
 
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { CliTokenUsageObserver, type CliUsageProtection } from "./token-usage-observer.js";
 import type {
   CliAutonomyPosture,
   CliSession,
@@ -125,6 +127,8 @@ export interface ResolvedCliExecutorConfig {
 // ── Launch options ─────────────────────────────────────────────────────────────
 
 export interface LaunchCliTaskSessionOptions {
+  /** Native task admission, durable accounting and launch-time budget snapshot. */
+  usageProtection?: CliUsageProtection;
   /** Owning task id. */
   taskId: string;
   /** Project the task/session belongs to. */
@@ -184,6 +188,8 @@ export class CliTaskSession {
   private readonly hookEndpointUrl: string;
   private readonly log: (msg: string) => void;
 
+  private usageObserver?: CliTokenUsageObserver;
+  private finishing = false;
   private settled = false;
   private resolveResult!: (outcome: CliTaskOutcome) => void;
   private resultPromise: Promise<CliTaskOutcome>;
@@ -223,6 +229,7 @@ export class CliTaskSession {
   static async launch(opts: LaunchCliTaskSessionOptions): Promise<CliTaskSession> {
     const log = opts.log ?? (() => {});
     const adapter = opts.registry.get(opts.config.cliAdapterId);
+    if (opts.usageProtection && !["codex", "claude-code"].includes(adapter.id)) throw new Error("CLI observed token accounting unsupported for adapter");
 
     // 0. Autonomy approval gate (U15). Resolve the EFFECTIVE posture from the
     // fully resolved argv + env (NOT the autonomy field alone) and enforce the
@@ -241,15 +248,18 @@ export class CliTaskSession {
     const root = opts.hookDirRoot ?? tmpdir();
     const hookDir = await mkdtemp(join(root, "fusion-cli-hooks-"));
 
-    // We cannot write the hook scripts until we have a session id (the scripts
-    // embed it), and we cannot get a session id without spawning. So: spawn FIRST
-    // with a settings shape that points at the (deterministic) script paths, then
-    // write the scripts before readiness (the agent only invokes a hook once it is
-    // up — readiness gates the first prompt injection, and the SessionStart hook
-    // fires around the same time). To avoid a race we write the scripts as part of
-    // launch, immediately after spawn, before injecting.
+    // The manager allocates and durably writes the session before beforePtyStart.
+    // Prepare authenticated hook context in that callback, before any child can
+    // emit SessionStart. The launch argv can already reference these stable paths.
     const hookScriptPath = join(hookDir, HOOK_SCRIPT_NAMES.hook);
     const settingsPath = join(hookDir, "settings.json");
+    const hookArgv = [process.execPath, fileURLToPath(new URL("./native-hook.js", import.meta.url))];
+    const stableHookCommand = hookArgv.map(part => "'" + part.replaceAll("'", "'\"'\"'") + "'").join(" ");
+    const hookCommand = opts.usageProtection ? stableHookCommand : hookScriptPath;
+    let usageObserver: CliTokenUsageObserver | undefined;
+    const sessionHandle: { current?: CliTaskSession } = {};
+    let protectionError: Error | undefined;
+    let preparedSessionId: string | undefined;
 
     // Fold the per-adapter operator settings (U15) into the launch settings bag
     // so they actually reach the child: command override → `command`, extra args
@@ -279,13 +289,14 @@ export class CliTaskSession {
         : {}),
       envAllowlist: [...new Set([...priorAllowlist, ...operatorEnvAdditions])],
       hookScripts: {
-        stopScript: hookScriptPath,
-        notificationScript: hookScriptPath,
-        permissionScript: hookScriptPath,
-        sessionStartScript: hookScriptPath,
-        toolActivityScript: hookScriptPath,
+        stopScript: hookCommand,
+        notificationScript: hookCommand,
+        permissionScript: hookCommand,
+        sessionStartScript: hookCommand,
+        toolActivityScript: hookCommand,
       },
       settingsPath,
+      ...(opts.config.cliAdapterId === "codex" ? (opts.usageProtection ? { notifyCommand: hookArgv } : { notifyProgram: join(hookDir, HOOK_SCRIPT_NAMES.notify) }) : {}),
     };
 
     // 2. Spawn (reserves the concurrency slot; throws CliConcurrencyLimitError at
@@ -304,6 +315,7 @@ export class CliTaskSession {
         // preserved (buildLaunch still reads `autoApprove`).
         posture: {
           ...(opts.config.cliAutonomy ?? {}),
+          ...(opts.usageProtection ? { cliTokenBudgetProtocol: "native-cli-observed-v1" } : {}),
           // `autonomyMode: "elevated"` is an alternate channel to the field; map
           // it onto `autoApprove` so the adapter's buildLaunch emits the
           // privileged flags (it keys off `posture.autoApprove`).
@@ -317,21 +329,27 @@ export class CliTaskSession {
           },
         },
         settings,
+        beforePtyStart: async prepared => {
+          preparedSessionId = prepared.id;
+          const token = opts.hub.issueToken(prepared.id);
+          await writeSessionHookScripts({ sessionId: prepared.id, token, endpointUrl: opts.hookEndpointUrl, dir: hookDir });
+          if (!opts.usageProtection) return;
+          const contextPath = join(hookDir, "native-context.json");
+          await writeFile(contextPath, JSON.stringify({ endpoint: opts.hookEndpointUrl, sessionId: prepared.id, token }), { mode: 0o600 });
+          usageObserver = new CliTokenUsageObserver(prepared, opts.usageProtection, opts.hub, error => {
+            protectionError = error;
+            if (sessionHandle.current) void sessionHandle.current.kill("killed");
+          });
+          return { hookContextPath: contextPath };
+        },
       });
     } catch (err) {
       // Clean up the scratch dir we created before re-throwing (ceiling / spawn).
+      usageObserver?.close();
+      if (preparedSessionId) opts.hub.invalidate(preparedSessionId);
       await cleanupSessionHookDir(hookDir).catch(() => {});
       throw err;
     }
-
-    // 3. Mint the per-session hook token + write the hook scripts.
-    const token = opts.hub.issueToken(record.id);
-    await writeSessionHookScripts({
-      sessionId: record.id,
-      token,
-      endpointUrl: opts.hookEndpointUrl,
-      dir: hookDir,
-    });
 
     const session = new CliTaskSession({
       taskId: opts.taskId,
@@ -344,6 +362,10 @@ export class CliTaskSession {
       hookEndpointUrl: opts.hookEndpointUrl,
       log,
     });
+
+    sessionHandle.current = session;
+    session.usageObserver = usageObserver;
+    if (protectionError) await session.kill("killed");
 
     // 4. Subscribe to the authoritative state machine BEFORE injecting so a fast
     // done is never missed.
@@ -391,6 +413,7 @@ export class CliTaskSession {
    */
   async followUp(prompt: string): Promise<boolean> {
     const adapter = this.registry.get(this.config.cliAdapterId);
+    if (this.usageObserver) return false; // Protected continuation must enter a fresh admitted launch.
     if (!adapter.capabilities.supportsResume) return false;
     if (!this.manager.isLive(this.sessionId)) return false;
     // Live + resumable: a follow-up is just another injection on the live PTY.
@@ -438,6 +461,7 @@ export class CliTaskSession {
    * `killed`.
    */
   async kill(reason: CliTerminationReason = "killed"): Promise<void> {
+    this.usageObserver?.close();
     this.manager.kill(this.sessionId, reason);
     await this.teardown();
     if (!this.settled) {
@@ -466,7 +490,10 @@ export class CliTaskSession {
     if (this.settled) return;
     switch (state) {
       case "done":
-        this.finish({ kind: "success", sessionId: this.sessionId, terminationReason: "completed" });
+        if (this.usageObserver && !this.finishing) {
+          this.finishing = true;
+          void this.usageObserver.drain().then(() => this.finish({ kind: "success", sessionId: this.sessionId, terminationReason: "completed" })).catch(() => this.kill("killed"));
+        } else if (!this.usageObserver) this.finish({ kind: "success", sessionId: this.sessionId, terminationReason: "completed" });
         break;
       case "needsAttention":
         this.finish({
@@ -497,7 +524,8 @@ export class CliTaskSession {
 
   private async injectAfterReady(prompt: string, _nativeDone: boolean): Promise<void> {
     try {
-      await this.manager.waitForReady(this.sessionId);
+      await Promise.all([this.manager.waitForReady(this.sessionId), this.usageObserver?.ready()]);
+      if (this.settled) return;
     } catch {
       // Session may have died before readiness — the state machine / exit handler
       // resolves the result; nothing to inject.
@@ -532,6 +560,7 @@ export class CliTaskSession {
   private finish(outcome: CliTaskOutcome): void {
     if (this.settled) return;
     this.settled = true;
+    this.usageObserver?.close();
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.resolveResult(outcome);

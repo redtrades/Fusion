@@ -3144,3 +3144,8 @@ export * from "./memory/recall-capture.js";
 export * from "./config/mcp-builtin-descriptor.js";
 export { resolveJiraConfig, resolveJiraEnabled, DEFAULT_JIRA_TOKEN_SECRET_KEY, DEFAULT_JIRA_BRANCH_NAME_TEMPLATE } from "./jira/jira-config.js";
 export type { JiraConfigSettingsSource, ResolvedJiraConfig, ResolveJiraConfigInput, JiraTokenSecretScope } from "./jira/jira-config.js";
+export { advanceCliTokenLedger, validateCliTokenLedger, emptyCliTokenCounters, validateCliTokenCounters, CLI_TOKEN_FIELDS } from "./cli/cli-token-usage-types.js";
+export type { CliTokenCounters, CliTokenLedger } from "./cli/cli-token-usage-types.js";
+
+export type { CliTokenUsageWrite, CliTokenUsageAck } from "./task-store/cli-token-usage-ops.js";
+export type { CliTokenBudgetQuery, CliTokenBudgetInspection } from "./cli/cli-token-usage-types.js";

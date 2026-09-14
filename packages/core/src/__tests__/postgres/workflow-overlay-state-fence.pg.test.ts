@@ -1,11 +1,13 @@
-import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { TaskStore } from "../../store.js";
 import { __setResetPublicationFailureForTesting } from "../../task-store/reset-lifecycle.js";
 import { pgDescribe, createSharedPgTaskStoreTestHarness } from "../../__test-utils__/pg-test-harness.js";
 
 pgDescribe("workflow overlay checkpoint fencing", () => {
   const h = createSharedPgTaskStoreTestHarness({ prefix: "fusion_overlay_fence", poolMax: 4, projectId: "proj-overlay-fixture" });
-  beforeAll(h.beforeAll); beforeEach(h.beforeEach); afterEach(h.afterEach); afterAll(h.afterAll);
+  beforeAll(h.beforeAll); beforeEach(h.beforeEach); afterEach(h.afterEach); afterEach(() => vi.restoreAllMocks()); afterAll(h.afterAll);
   const admission = { runId: "run-a", leaseEpoch: 1, agentId: "agent-a", nodeId: "host-a" };
   const request = () => ({ admission, expectedPhaseCount: 0, operationId: "phase-a",
     nextState: { runId: "graph-a", claimId: "claim-a", occurrence: 1, phaseCount: 1, previousEnvelope: { phase_id: "validator:1" }, reviewedHeadOid: null,
@@ -29,11 +31,17 @@ pgDescribe("workflow overlay checkpoint fencing", () => {
   it("appends a subsequent phase and recovers an acknowledged database write after projection failure", async () => {
     const t = await task();
     const store = h.store();
+    vi.spyOn(store, "isWatching", "get").mockReturnValue(true);
+    store.taskCache.set(t.id, t);
     const original = store.writeTaskJsonFile;
     store.writeTaskJsonFile = async () => { throw new Error("fixture projection unavailable"); };
     try { await expect(store.updateWorkflowOverlayStateFenced(t.id, request())).rejects.toThrow("fixture projection unavailable"); }
     finally { store.writeTaskJsonFile = original; }
+    expect((await store.getTask(t.id)).sourceMetadata?.procedureEngineLive).toBeDefined();
+    expect(JSON.parse(await readFile(join(store.taskDir(t.id), "task.json"), "utf8")).sourceMetadata?.procedureEngineLive).toBeUndefined();
     await expect(store.updateWorkflowOverlayStateFenced(t.id, request())).resolves.toMatchObject({ applied: true, replayed: true });
+    expect(JSON.parse(await readFile(join(store.taskDir(t.id), "task.json"), "utf8")).sourceMetadata?.procedureEngineLive).toMatchObject({ runs: { "graph-a": request().nextState } });
+    expect(store.taskCache.get(t.id)?.sourceMetadata?.procedureEngineLive).toMatchObject({ runs: { "graph-a": request().nextState } });
     const next = { ...request(), operationId: "phase-b", expectedPhaseCount: 1,
       nextState: { ...request().nextState, phaseCount: 2,
         receipts: [...request().nextState.receipts, { nodeInstanceId: "builder:1" }] } };
@@ -50,6 +58,14 @@ pgDescribe("workflow overlay checkpoint fencing", () => {
     ]) await expect(store.updateWorkflowOverlayStateFenced(t.id, input)).resolves.toEqual({ applied: false, reason: "invalid-input" });
     const unbound = new TaskStore(h.rootDir());
     await expect(unbound.updateWorkflowOverlayStateFenced(t.id, request())).resolves.toEqual({ applied: false, reason: "unavailable" });
+  });
+  it("permits equal graph and checkout ID strings and null envelopes across rejected phases", async () => {
+    const t = await task();
+    const first = { ...request(), nextState: { ...request().nextState, runId: admission.runId, previousEnvelope: null, occurrence: 0 } };
+    await expect(h.store().updateWorkflowOverlayStateFenced(t.id, first)).resolves.toMatchObject({ applied: true });
+    const next = { ...first, operationId: "rejected-phase-b", expectedPhaseCount: 1,
+      nextState: { ...first.nextState, phaseCount: 2, receipts: [...first.nextState.receipts, { nodeInstanceId: "builder:1", outcome: "rejected" }] } };
+    await expect(h.store().updateWorkflowOverlayStateFenced(t.id, next)).resolves.toMatchObject({ applied: true, state: { previousEnvelope: null, occurrence: 0 } });
   });
   it("two store instances competing at the same revision produce one winner", async () => {
     const t = await task();

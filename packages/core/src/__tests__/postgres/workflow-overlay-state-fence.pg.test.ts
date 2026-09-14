@@ -8,7 +8,7 @@ pgDescribe("workflow overlay checkpoint fencing", () => {
   beforeAll(h.beforeAll); beforeEach(h.beforeEach); afterEach(h.afterEach); afterAll(h.afterAll);
   const admission = { runId: "run-a", leaseEpoch: 1, agentId: "agent-a", nodeId: "host-a" };
   const request = () => ({ admission, expectedPhaseCount: 0, operationId: "phase-a",
-    nextState: { phaseCount: 1, previousEnvelope: { phase_id: "validator:1" }, reviewedHeadOid: null,
+    nextState: { runId: "graph-a", claimId: "claim-a", occurrence: 1, phaseCount: 1, previousEnvelope: { phase_id: "validator:1" }, reviewedHeadOid: null,
       receipts: [{ nodeInstanceId: "validator:1", provenance: { sessionId: "session-a" } }] } });
   async function task() {
     const t = await h.store().createTask({ description: "overlay CAS fixture" });
@@ -20,7 +20,7 @@ pgDescribe("workflow overlay checkpoint fencing", () => {
     const t = await task(); const input = request();
     const ack = await h.store().updateWorkflowOverlayStateFenced(t.id, input);
     expect(ack).toMatchObject({ applied: true, replayed: false, state: input.nextState });
-    expect((await h.store().getTask(t.id)).sourceMetadata).toMatchObject({ unrelated: { keep: true }, procedureEngineLive: { runs: { "run-a": input.nextState } } });
+    expect((await h.store().getTask(t.id)).sourceMetadata).toMatchObject({ unrelated: { keep: true }, procedureEngineLive: { runs: { "graph-a": input.nextState } } });
     await expect(h.store().updateWorkflowOverlayStateFenced(t.id, input)).resolves.toMatchObject({ applied: true, replayed: true, state: input.nextState });
     expect((await h.store().getTask(t.id)).column).toBe(t.column);
     input.nextState.receipts[0].provenance.sessionId = "different-session";
@@ -38,7 +38,7 @@ pgDescribe("workflow overlay checkpoint fencing", () => {
       nextState: { ...request().nextState, phaseCount: 2,
         receipts: [...request().nextState.receipts, { nodeInstanceId: "builder:1" }] } };
     await expect(store.updateWorkflowOverlayStateFenced(t.id, next)).resolves.toMatchObject({ applied: true, state: next.nextState });
-    expect((await store.getTask(t.id)).sourceMetadata?.procedureEngineLive).toMatchObject({ runs: { "run-a": next.nextState } });
+    expect((await store.getTask(t.id)).sourceMetadata?.procedureEngineLive).toMatchObject({ runs: { "graph-a": next.nextState } });
   });
   it("rejects lossy or oversized data, foreign state fields, phase overflow, and an unavailable backend", async () => {
     const t = await task(); const store = h.store();
@@ -57,7 +57,7 @@ pgDescribe("workflow overlay checkpoint fencing", () => {
     const results = await Promise.all([h.store().updateWorkflowOverlayStateFenced(t.id, request()),
       other.updateWorkflowOverlayStateFenced(t.id, { ...request(), operationId: "competitor" })]);
     expect(results.filter(r => r.applied)).toHaveLength(1);
-    expect((await h.store().getTask(t.id)).sourceMetadata?.procedureEngineLive).toMatchObject({ runs: { "run-a": { phaseCount: 1 } } });
+    expect((await h.store().getTask(t.id)).sourceMetadata?.procedureEngineLive).toMatchObject({ runs: { "graph-a": { phaseCount: 1 } } });
   });
   it("rejects old lease owners even for an otherwise idempotent replay", async () => {
     const t = await task(); await h.store().updateWorkflowOverlayStateFenced(t.id, request());
@@ -71,8 +71,8 @@ pgDescribe("workflow overlay checkpoint fencing", () => {
     await h.store().updateTask(t.id, { checkedOutBy: replacement.agentId, checkoutNodeId: replacement.nodeId,
       checkoutRunId: replacement.runId, checkoutLeaseEpoch: replacement.leaseEpoch });
     await expect(h.store().updateWorkflowOverlayStateFenced(t.id, request())).resolves.toMatchObject({ applied: false, reason: "ownership-mismatch" });
-    await expect(h.store().updateWorkflowOverlayStateFenced(t.id, { ...request(), admission: replacement })).resolves.toMatchObject({ applied: true, replayed: false });
-    expect((await h.store().getTask(t.id)).sourceMetadata?.procedureEngineLive).toMatchObject({ runs: { "run-a": request().nextState, "run-b": request().nextState } });
+    await expect(h.store().updateWorkflowOverlayStateFenced(t.id, { ...request(), admission: replacement, nextState: { ...request().nextState, runId: "graph-b" } })).resolves.toMatchObject({ applied: true, replayed: false });
+    expect((await h.store().getTask(t.id)).sourceMetadata?.procedureEngineLive).toMatchObject({ runs: { "graph-a": request().nextState, "graph-b": { ...request().nextState, runId: "graph-b" } } });
   });
   it("allows a valid same-run lease takeover to replay and append without rewriting historical provenance", async () => {
     const t = await task(); await h.store().updateWorkflowOverlayStateFenced(t.id, request());
@@ -84,6 +84,15 @@ pgDescribe("workflow overlay checkpoint fencing", () => {
       nextState: { ...request().nextState, phaseCount: 2, receipts: [...request().nextState.receipts, { nodeInstanceId: "builder:1" }] } };
     await expect(h.store().updateWorkflowOverlayStateFenced(t.id, next)).resolves.toMatchObject({ applied: true, state: next.nextState });
   });
+  it("keeps two graph runs separate under one checkout and refuses changed claims", async () => {
+    const t = await task();
+    await h.store().updateWorkflowOverlayStateFenced(t.id, request());
+    const second = { ...request(), nextState: { ...request().nextState, runId: "graph-b", claimId: "claim-b" } };
+    await expect(h.store().updateWorkflowOverlayStateFenced(t.id, second)).resolves.toMatchObject({ applied: true, replayed: false });
+    const state = (await h.store().getTask(t.id)).sourceMetadata?.procedureEngineLive;
+    expect(state).toMatchObject({ runs: { "graph-a": request().nextState, "graph-b": second.nextState } });
+    await expect(h.store().updateWorkflowOverlayStateFenced(t.id, { ...request(), nextState: { ...request().nextState, claimId: "changed" } })).resolves.toMatchObject({ applied: false });
+  });
   it("waits behind Reset and refuses the cleared lease instead of restoring a checkpoint", async () => {
     const t = await task();
     let entered!: () => void; const held = new Promise<void>(r => { entered = r; });
@@ -91,7 +100,13 @@ pgDescribe("workflow overlay checkpoint fencing", () => {
     const restore = __setResetPublicationFailureForTesting(async () => { entered(); await gate; });
     try {
       const reset = h.store().resetTaskPublication(t.id, "todo"); await held;
-      const late = h.store().updateWorkflowOverlayStateFenced(t.id, request());
+      const other = new TaskStore(h.rootDir(), undefined, { asyncLayer: h.layer() });
+      const late = other.updateWorkflowOverlayStateFenced(t.id, request());
+      await expect.poll(async () => {
+        const rows = await h.adminSql()`SELECT count(*)::int AS n FROM pg_stat_activity
+          WHERE datname = current_database() AND wait_event = 'advisory'`;
+        return rows[0].n;
+      }, { timeout: 1000, interval: 10 }).toBe(1);
       release(); await reset;
       await expect(late).resolves.toEqual({ applied: false, reason: "ownership-mismatch" });
       expect((await h.store().getTask(t.id)).sourceMetadata?.procedureEngineLive).toBeUndefined();

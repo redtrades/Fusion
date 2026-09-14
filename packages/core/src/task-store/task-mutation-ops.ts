@@ -404,6 +404,9 @@ export interface WorkflowOverlayAdmission {
   nodeId: string;
 }
 export interface WorkflowOverlayState {
+  runId: string;
+  claimId: string;
+  occurrence: number;
   phaseCount: number;
   previousEnvelope: Record<string, unknown> | null;
   reviewedHeadOid: string | null;
@@ -442,14 +445,15 @@ export async function updateWorkflowOverlayStateFencedImpl(
   const { admission, expectedPhaseCount, operationId, nextState } = request;
   const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
   if (!record(admission) || !record(nextState)
-      || ![admission.runId, admission.agentId, admission.nodeId, operationId].every(v => typeof v === "string" && v.trim().length > 0 && v.length <= 256)
+      || ![admission.runId, admission.agentId, admission.nodeId, operationId, nextState.runId, nextState.claimId].every(v => typeof v === "string" && v.trim().length > 0 && v.length <= 256)
       || !Number.isSafeInteger(admission.leaseEpoch) || admission.leaseEpoch < 0
       || !Number.isSafeInteger(expectedPhaseCount) || expectedPhaseCount < 0 || expectedPhaseCount >= WORKFLOW_OVERLAY_MAX_PHASES
+      || !Number.isSafeInteger(nextState.occurrence) || nextState.occurrence < 0 || nextState.occurrence > nextState.phaseCount
       || nextState.phaseCount !== expectedPhaseCount + 1
       || !Array.isArray(nextState.receipts) || nextState.receipts.length !== nextState.phaseCount || !nextState.receipts.every(record)
       || !(nextState.previousEnvelope === null || record(nextState.previousEnvelope))
       || !(nextState.reviewedHeadOid === null || typeof nextState.reviewedHeadOid === "string")
-      || Object.keys(nextState).some(key => !["phaseCount", "previousEnvelope", "reviewedHeadOid", "receipts"].includes(key))
+      || Object.keys(nextState).some(key => !["runId", "claimId", "occurrence", "phaseCount", "previousEnvelope", "reviewedHeadOid", "receipts"].includes(key))
       || Object.keys(admission).some(key => !["runId", "leaseEpoch", "agentId", "nodeId"].includes(key))) {
     return { applied: false, reason: "invalid-input" };
   }
@@ -475,13 +479,13 @@ export async function updateWorkflowOverlayStateFencedImpl(
             || !Array.isArray(prior.receipts) || prior.receipts.length !== prior.phaseCount) return { applied: false, reason: "invalid-checkpoint" };
         totalPhases += prior.phaseCount;
       }
-      const stored = Object.hasOwn(runs, admission.runId) ? runs[admission.runId] : undefined;
+      const stored = Object.hasOwn(runs, nextState.runId) ? runs[nextState.runId] : undefined;
       if (stored !== undefined) {
         if (!record(stored) || !record(stored.writeFence) || !Array.isArray(stored.receipts)
             || !Number.isSafeInteger(stored.phaseCount) || stored.phaseCount !== stored.receipts.length) {
           return { applied: false, reason: "invalid-checkpoint" };
         }
-        if (stored.writeFence.admission?.runId !== admission.runId) return { applied: false, reason: "invalid-checkpoint" };
+        if (stored.runId !== nextState.runId || stored.claimId !== nextState.claimId || !Number.isSafeInteger(stored.occurrence) || stored.occurrence > nextState.occurrence) return { applied: false, reason: "invalid-checkpoint" };
         const { writeFence, ...state } = stored;
         if (writeFence.operationId === operationId && writeFence.expectedPhaseCount === expectedPhaseCount && isDeepStrictEqual(state, nextState)) {
           return { applied: true, task: current, state, replayed: true };
@@ -490,7 +494,7 @@ export async function updateWorkflowOverlayStateFencedImpl(
         if (!isDeepStrictEqual(stored.receipts, nextState.receipts.slice(0, expectedPhaseCount))) return { applied: false, reason: "invalid-checkpoint" };
       } else if (expectedPhaseCount !== 0) return { applied: false, reason: "revision-mismatch" };
       const checkpoint: StoredWorkflowOverlayState = { ...nextState, writeFence: { admission, operationId, expectedPhaseCount } };
-      const nextNamespace = { runs: { ...runs, [admission.runId]: checkpoint } };
+      const nextNamespace = { runs: { ...runs, [nextState.runId]: checkpoint } };
       if (totalPhases >= WORKFLOW_OVERLAY_MAX_PHASES || Buffer.byteLength(JSON.stringify(nextNamespace), "utf8") > WORKFLOW_OVERLAY_MAX_BYTES) {
         return { applied: false, reason: "invalid-input" };
       }

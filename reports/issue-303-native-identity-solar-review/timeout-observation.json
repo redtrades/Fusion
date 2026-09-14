@@ -1,0 +1,18 @@
+{
+  "kind": "coordinator-timeout-observation-not-native-usage",
+  "sourceHead": "c7d04532315ce85fd072a33f4446b79edb905065",
+  "base": "379c94d5e7c3bb824baf9b5c3705781904848c36",
+  "pid": 25908,
+  "verifiedStartLocal": "2026-09-14 02:48:19 EDT",
+  "verifiedElapsedSecondsBeforeTermination": 236,
+  "configuredRunBudgetSeconds": 180,
+  "terminationSignal": "SIGTERM",
+  "processExitCode": 143,
+  "processAbsentAfterTermination": true,
+  "verdictAvailable": false,
+  "nativeUsageReceiptAvailable": false,
+  "nativeSessionIdKnown": false,
+  "usage": "unknown",
+  "cost": "unknown",
+  "retryOrFallback": false
+}

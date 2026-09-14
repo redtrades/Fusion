@@ -1,0 +1,111 @@
+FILE /Users/man/.hermes/hermes-agent/agent/agent_init.py SHA256 b64195a84942304a53125d7b04d61ef20589f793d5a95e45b615b74296aed0c2
+1103: def _publish_session_id(session_id: str) -> None:
+1104:     """Expose the session ID to tools via ContextVar (+ legacy os.environ fallback).
+1105:
+1106:     If the ContextVar bridge fails to import, keep the root-agent env fallback but never let
+1107:     delegated construction publish a child ID process-wide.
+1108:     """
+1109:     try:
+1110:         from gateway.session_context import set_current_session_id
+1111:         set_current_session_id(session_id)
+1112:     except Exception:
+1113:         try:
+1114:             from agent.delegation_context import is_delegated_child_context
+1115:             delegated_child = is_delegated_child_context()
+1116:         except Exception:
+1117:             delegated_child = False
+1118:         if not delegated_child:
+1119:             os.environ["HERMES_SESSION_ID"] = session_id
+1120:
+1121:
+1122: def _init_session_state(agent, session_id, session_db, parent_session_id, reasoning_config, max_tokens,
+1123:     checkpoints_enabled, checkpoint_max_snapshots, checkpoint_max_total_size_mb, checkpoint_max_file_size_mb):
+1124:     agent.session_start = datetime.now()
+1125:     agent.session_id = session_id or new_session_id(agent.session_start)
+1126:     _publish_session_id(agent.session_id)
+1127:
+1128:     # ~/.hermes/sessions/ — kept unconditionally for request_dump_*.json debug breadcrumbs.
+1129:     agent.logs_dir = get_hermes_home() / "sessions"
+1130:     agent.logs_dir.mkdir(parents=True, exist_ok=True)
+1131:     _set_defaults(agent, _SESSION_STATE)
+1132:
+1133:     # Filesystem checkpoint manager (transparent — not a tool)
+1134:     from tools.checkpoint_manager import CheckpointManager
+1135:     agent._checkpoint_mgr = CheckpointManager(
+1136:         enabled=checkpoints_enabled, max_snapshots=checkpoint_max_snapshots,
+1137:         max_total_size_mb=checkpoint_max_total_size_mb,
+1138:         max_file_size_mb=checkpoint_max_file_size_mb,
+1139:     )
+1140:
+1141:     agent._session_db = session_db  # optional SQLite store (CLI/gateway-provided)
+1142:     agent._parent_session_id = parent_session_id
+
+FILE /Users/man/.hermes/hermes-agent/run_agent.py SHA256 059a09bc729942ffd462720104f4e67cfa2ef44af1901e0d5884e2de7a0fc499
+282:     def _get_session_db_for_recall(self):
+283:         """SessionDB for recall, opening the default state DB when no ``session_db`` was passed so the
+284:         advertised ``session_search`` tool stays usable."""
+285:         # Persistence-isolated forks (background review) must not lazily open the canonical state DB —
+286:         # that would re-arm the flush to write the fork's harness turn into the user's real session.
+287:         if getattr(self, "_persist_disabled", False):
+288:             return None
+289:         if self._session_db is not None:
+290:             return self._session_db
+291:         try:
+292:             from hermes_state_registry import acquire
+293:
+294:             self._session_db = acquire()
+295:             self._owns_session_db = True  # we opened it, so close() must release it
+296:             return self._session_db
+297:         except Exception:
+298:             logger.debug("SessionDB unavailable for recall", exc_info=True)
+299:             return None
+300:
+301:     def _session_row_model_config(self) -> Any:
+302:         """``model_config`` for the session row: the init config plus the live YOLO bypass.
+303:
+304:         The row is created lazily on the first turn, so this is the only chance to record a pre-first-turn
+305:         /yolo toggle for ``hermes --resume``.
+306:         """
+307:         model_config = self._session_init_model_config
+308:         try:
+309:             from tools.approval import is_session_yolo_enabled
+310:             if is_session_yolo_enabled(self.session_id):
+311:                 model_config = dict(model_config or {})
+312:                 model_config["yolo_mode"] = True
+313:         except Exception:
+314:             pass
+315:         return model_config
+316:
+317:     def _ensure_db_session(self) -> None:
+318:         """Create the session DB row on first use; a transient failure leaves it to retry next turn."""
+319:         if getattr(self, "_persist_disabled", False) or self._session_db_created or not self._session_db:
+320:             return
+
+FILE /Users/man/.hermes/hermes-agent/agent/inline_tool_executors.py SHA256 44bb82f4e38b487436151fb43b6ceb0868a63495df11ef40a7c8f94d240cc8ed
+95:
+96: def _session_search(agent, args: dict, ctx: InlineToolContext) -> Any:
+97:     session_db = agent._get_session_db_for_recall()
+98:     if not session_db:
+99:         from hermes_state import format_session_db_unavailable
+100:
+
+FILE /Users/man/.hermes/hermes-agent/hermes_cli/oneshot.py SHA256 66219f62f3d4638d2ef16b374661134b0be681aeefd90d4b18084018b632395d
+142: def _write_usage_file(path: Optional[str], result: dict, failure: Optional[str] = None) -> None:
+143:     """Best-effort JSON usage report for pipelines (``-z --usage-file``).
+144:
+145:     Written even on failure so callers can always account for spend. Never raises — a broken usage
+146:     write must not mask the run's own outcome.
+147:     """
+148:     if not path:
+149:         return
+150:     try:
+151:         report = {key: result.get(key) for key in _USAGE_KEYS}
+152:         report["failed"] = bool(result.get("failed")) or failure is not None
+153:         report["service_tier"] = result.get("service_tier")
+154:         if failure is not None:
+155:             report["failure"] = failure
+156:         out = Path(path).expanduser()
+157:         out.parent.mkdir(parents=True, exist_ok=True)
+158:         out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+159:     except Exception:
+160:         pass

@@ -1,0 +1,37 @@
+[
+  {
+    "file": "303-root-protected-composed-pg.log.gz",
+    "rawSha256": "572f06f9a100cd5edd0cb10dd97dddac9431f4db0fece1e264a6789442d2f58a",
+    "gzipSha256": "5d406abb569e42e490949978d80b96faf4934790b74fecf63417ab763e7e87b7"
+  },
+  {
+    "file": "303-root-protected-core-build.log.gz",
+    "rawSha256": "be0676739c6cfbbf7a3d789738016773c063320f4d2a4ca0549ecd2e4f4596c7",
+    "gzipSha256": "7abce049bddc45855b80b480c6e994031715ca06ad8381590f4fd2df63147e87"
+  },
+  {
+    "file": "303-root-protected-engine-build.log.gz",
+    "rawSha256": "1336c0e7a49570d9c48dd5c3db057ada1da58e78114f7fb1c63201a7ee2053b4",
+    "gzipSha256": "2579a028123577ec626eee7bda7753440680db5d9ea65d752764da76455612e7"
+  },
+  {
+    "file": "303-root-protected-cli-typecheck.log.gz",
+    "rawSha256": "321154da13ac87884919d4580ced6c4a2acc945f9d2095ac3735a5e5e2d3b8cc",
+    "gzipSha256": "b0d72d6b8f88257bf585dd826cee10cca86d01526c8515e5cfe278869e15f909"
+  },
+  {
+    "file": "303-root-protected-unit.log.gz",
+    "rawSha256": "f7967148b6acf70676d1d371cb709260e58ae597df6a37e7089f3d078a0b9e7a",
+    "gzipSha256": "b5150bd5df7080d5effbbfe7d5ff04609f450fd10711440e939a7fc84fc649c4"
+  },
+  {
+    "file": "303-root-protected-static.log.gz",
+    "rawSha256": "538048bcb4fb7887ffd82df8b02a2897be148f44628390442dd50e08903e359b",
+    "gzipSha256": "3eadeb26e1f27eb8375f1d027eb41e49a503507bcc362a7b76485621c6120be7"
+  },
+  {
+    "file": "303-root-protected-unit.config.mts.gz",
+    "rawSha256": "d49c1cac83b9e2dc2f1351beb46fda1572a6a87b8f48178eb31f95773ab40508",
+    "gzipSha256": "4d9939fc85c5383d7b40d7476cfb74dee2aedce0151577772c103c199129b1f8"
+  }
+]

@@ -1,0 +1,42 @@
+Workflow
+Tier 1 fixture
+Implementation
+0/0
++ New Task
+
+AI is working on this in a worktree
+
+Deps
+Models
+Agent
+Save
+No tasks
+Review
+0/0
+Auto-merge
+No tasks
+Blocked 1
+TASK-1
+Paused
+Waiting for required input
+
+Original phase: in-progress
+
+Reason: missing-input
+
+Resume actor: orchestrator
+
+Open TASK-1
+Escalated 1
+TASK-2
+Paused
+Review needs human decision
+
+Original phase: in-review
+
+Reason: validation-inconclusive
+
+Resume actor: human
+
+Open TASK-2
+{"terminalCount":0,"body":"Workflow\nTier 1 fixture\nImplementation\n1/1\n\nAI is working on this in a worktree\n\nDeps\nModels\nAgent\nSave\nTASK-1\nWaiting for required input\nCreated Sep 13\n3h\nReview\n0/1\nAuto-merge\nTASK-2\nQUEUED\nReview needs human decision\nCreated Sep 13"}

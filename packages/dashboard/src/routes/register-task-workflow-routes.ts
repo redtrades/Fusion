@@ -1,3 +1,4 @@
+import { enrichTaskTerminalDisplays } from "./task-terminal-display.js";
 import { createIngestedCheckResolver, createLogger, DuplicateWorkflowSelectionError, isCurrentSpecDriftReport, MAX_TASK_MESSAGE_LENGTH, resolveRequiredCheckNames } from "@fusion/core";
 import type { Request, Response } from "express";
 
@@ -1519,7 +1520,7 @@ export function registerTaskWorkflowRoutes(ctx: ApiRoutesContext, deps: TaskWork
         // board load — fall through with the un-enriched task list.
       }
 
-      res.json(tasks);
+      res.json(await enrichTaskTerminalDisplays(scopedStore, tasks));
     } catch (err: unknown) {
       if (err instanceof ApiError) {
         throw err;
@@ -4927,7 +4928,7 @@ export function registerTaskWorkflowRoutes(ctx: ApiRoutesContext, deps: TaskWork
         // Planner-overseer-state enrichment is best-effort and must never
         // fail the task-detail load — fall through with the un-enriched task.
       }
-      res.json(trimTaskDetailActivityLog(enrichedTask));
+      res.json(trimTaskDetailActivityLog((await enrichTaskTerminalDisplays(scopedStore, [enrichedTask]))[0]));
     } catch (err: unknown) {
       if (err instanceof ApiError) {
         throw err;

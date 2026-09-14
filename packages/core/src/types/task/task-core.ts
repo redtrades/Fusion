@@ -805,7 +805,19 @@ export interface AiMergeReviewReconciliation {
   terminal?: boolean;
 }
 
+/** FNXC:TerminalBoard 2026-09-14-04:18: API-only current held-anchor display evidence; never a lifecycle column or release authorization. */
+export interface TaskTerminalDisplay {
+  kind: "blocked" | "escalated";
+  reason: string;
+  resumeActor: "human" | "orchestrator";
+  originColumn: string;
+  anchorId: string;
+  runId: string;
+  taskRevision: string;
+}
+
 export interface Task {
+  readonly terminalDisplay?: TaskTerminalDisplay;
   id: string;
   /** Immutable lineage identity used for durable commit/task attribution. */
   lineageId?: string;

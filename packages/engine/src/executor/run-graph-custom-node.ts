@@ -1023,9 +1023,16 @@ export async function runGraphCustomNode(
     // Workflow tab only shows a generic fallback and `[pre-merge]` revision logs
     // pass `undefined` detail. `notes` is only attached when the parsed verdict
     // produced notes; `output` carries the raw step output when present.
-    const stepOutput = (outcome as { output?: string }).output;
+    /* FNXC:WorkflowScriptEvidence 2026-09-14-05:54:
+     * Failed native scripts return error diagnostics rather than output. Project that real evidence
+     * without inventing review metadata or changing advisory/gate routing.
+     */
+    const stepOutput = (outcome as { output?: string }).output
+      ?? (mode === "script" && !outcome.success ? (outcome as { error?: string }).error : undefined);
     const stepNotes = (outcome as { notes?: string }).notes;
     const contextPatch: Record<string, unknown> = {};
+    // FNXC:WorkflowScriptEvidence 2026-09-14-05:57: Advisory routing can succeed after a failed command; retain the actual execution verdict for evidence only.
+    if (mode === "script") contextPatch.scriptSucceeded = outcome.success;
     if (typeof stepOutput === "string") contextPatch.output = stepOutput;
     if (typeof outcome.notRunReason === "string" && WORKFLOW_STEP_NOT_RUN_REASON_SET.has(outcome.notRunReason)) {
       contextPatch.notRunReason = outcome.notRunReason;

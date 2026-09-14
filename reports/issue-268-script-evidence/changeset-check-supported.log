@@ -1,0 +1,3 @@
+
+> fusion-workspace@0.77.0-beta.11 check:changesets /Users/man/worktrees/Fusion/268-script-evidence
+> node scripts/check-changeset-format.mjs

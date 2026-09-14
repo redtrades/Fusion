@@ -2139,7 +2139,14 @@ export class WorkflowGraphExecutor {
     const priorInstanceId = context["workflow:node-instance-id"];
     context["workflow:node-instance-id"] = materializedTemplateNodeId(node, context);
     try {
-      return await this.executeNodeWithRetries(node, task, settings, context, workflow, signal, false);
+      /* FNXC:WorkflowScriptEvidence 2026-09-14-05:54:
+       * Ordinary foreach scripts need their own concrete-instance evidence. Optional groups already
+       * own a result record; keep their template children suppressed to avoid duplicate progress.
+       */
+      const recordScript = node.kind === "script"
+        && context["foreach:active"] !== undefined
+        && context[WORKFLOW_OPTIONAL_GROUP_CONTEXT_KEY] === undefined;
+      return await this.executeNodeWithRetries(node, task, settings, context, workflow, signal, recordScript);
     } finally {
       if (priorInstanceId === undefined) delete context["workflow:node-instance-id"];
       else context["workflow:node-instance-id"] = priorInstanceId;
@@ -2156,6 +2163,8 @@ export class WorkflowGraphExecutor {
     recordProgress = true,
   ): Promise<WorkflowNodeResult> {
     const handler = this.handlers[node.kind];
+    const progressId = typeof context["workflow:node-instance-id"] === "string"
+      ? context["workflow:node-instance-id"] as string : node.id;
 
     // Per-node override: config.maxRetries beats the executor-wide default.
     const configured = Number(node.config?.maxRetries);
@@ -2168,7 +2177,7 @@ export class WorkflowGraphExecutor {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       // Fail-fast cancellation: a branch or top-level graph abort mid-retry stops re-trying.
       if (signal?.aborted) {
-        if (progressRecord) await this.discardWorkflowStepLease(task.id, node.id, progressRecord.result.startedAt!);
+        if (progressRecord) await this.discardWorkflowStepLease(task.id, progressId, progressRecord.result.startedAt!);
         return this.withEnginePauseAbortContext(node, { outcome: "failure", value: "aborted" });
       }
       progressRecord = null;
@@ -2210,20 +2219,20 @@ export class WorkflowGraphExecutor {
           return preflight;
         }
         progressRecord = recordProgress && this.shouldRecordNodeProgress(node)
-          ? await this.recordNodeProgressStart(task.id, node)
+          ? await this.recordNodeProgressStart(task.id, node, progressId)
           : null;
         const pluginResult = await this.executePluginNodeHandler(node, task, workflow, context, signal,
           handler ? () => handler(node, { task, settings, context, signal }) : undefined);
         if (pluginResult) {
           const projected = await this.publishTaskProjectionFromResult(task.id, node, pluginResult);
           if (signal?.aborted) {
-            if (progressRecord) await this.discardWorkflowStepLease(task.id, node.id, progressRecord.result.startedAt!);
+            if (progressRecord) await this.discardWorkflowStepLease(task.id, progressId, progressRecord.result.startedAt!);
             return this.withEnginePauseAbortContext(node, projected);
           }
           if (this.isAbortNodeResult(projected)) {
             return this.withEnginePauseAbortContext(node, projected);
           }
-          if (progressRecord && !await this.recordNodeProgressFinish(task.id, node, progressRecord, projected)) {
+          if (progressRecord && !await this.recordNodeProgressFinish(task.id, node, progressRecord, projected, progressId)) {
             /*
             FNXC:RepositoryScope 2026-08-21-02:48:
             A terminal review record rejected by the scope-generation CAS cannot
@@ -2239,13 +2248,13 @@ export class WorkflowGraphExecutor {
         const result = await handler(node, { task, settings, context, signal });
         const projected = await this.publishTaskProjectionFromResult(task.id, node, result);
         if (signal?.aborted) {
-          if (progressRecord) await this.discardWorkflowStepLease(task.id, node.id, progressRecord.result.startedAt!);
+          if (progressRecord) await this.discardWorkflowStepLease(task.id, progressId, progressRecord.result.startedAt!);
           return this.withEnginePauseAbortContext(node, projected);
         }
         if (this.isAbortNodeResult(projected)) {
           return this.withEnginePauseAbortContext(node, projected);
         }
-        if (progressRecord && !await this.recordNodeProgressFinish(task.id, node, progressRecord, projected)) {
+        if (progressRecord && !await this.recordNodeProgressFinish(task.id, node, progressRecord, projected, progressId)) {
           /* FNXC:RepositoryScope 2026-08-21-02:48: See the plugin-node path above; both graph dispatch routes share this edge fence. */
           return { outcome: "failure", value: "workspace-review-superseded" };
         }
@@ -2253,7 +2262,7 @@ export class WorkflowGraphExecutor {
       } catch (error) {
         if (error instanceof WorkflowGraphSuspended) throw error;
         if (signal?.aborted) {
-          if (progressRecord) await this.discardWorkflowStepLease(task.id, node.id, progressRecord.result.startedAt!);
+          if (progressRecord) await this.discardWorkflowStepLease(task.id, progressId, progressRecord.result.startedAt!);
           return this.withEnginePauseAbortContext(node, { outcome: "failure", value: "aborted" });
         }
         /*
@@ -2283,7 +2292,7 @@ export class WorkflowGraphExecutor {
             },
           };
           if (recordProgress && this.shouldRecordNodeProgress(node)) {
-            await this.recordNodeProgressFinish(task.id, node, null, failureResult);
+            await this.recordNodeProgressFinish(task.id, node, null, failureResult, progressId);
           }
           return failureResult;
         }
@@ -2297,7 +2306,7 @@ export class WorkflowGraphExecutor {
             },
           };
           if (recordProgress && this.shouldRecordNodeProgress(node)) {
-            await this.recordNodeProgressFinish(task.id, node, null, failureResult);
+            await this.recordNodeProgressFinish(task.id, node, null, failureResult, progressId);
           }
           return failureResult;
         }
@@ -2322,7 +2331,7 @@ export class WorkflowGraphExecutor {
     }
 
     if (signal?.aborted) {
-      if (progressRecord) await this.discardWorkflowStepLease(task.id, node.id, progressRecord.result.startedAt!);
+      if (progressRecord) await this.discardWorkflowStepLease(task.id, progressId, progressRecord.result.startedAt!);
       return this.withEnginePauseAbortContext(node, { outcome: "failure", value: "aborted" });
     }
 
@@ -2346,7 +2355,7 @@ export class WorkflowGraphExecutor {
         },
       };
       if (recordProgress && this.shouldRecordNodeProgress(node)) {
-        await this.recordNodeProgressFinish(task.id, node, null, degraded);
+        await this.recordNodeProgressFinish(task.id, node, null, degraded, progressId);
       }
       return degraded;
     }
@@ -2362,7 +2371,7 @@ export class WorkflowGraphExecutor {
       },
     };
     if (recordProgress && this.shouldRecordNodeProgress(node)) {
-      await this.recordNodeProgressFinish(task.id, node, null, failureResult);
+      await this.recordNodeProgressFinish(task.id, node, null, failureResult, progressId);
     }
     return failureResult;
   }
@@ -2378,7 +2387,7 @@ export class WorkflowGraphExecutor {
   private shouldRecordNodeProgress(node: WorkflowIrNode): boolean {
     const skillName = typeof node.config?.skillName === "string" ? node.config.skillName.trim() : "";
     const markedReview = this.workflowReviewKind(node) !== undefined;
-    return (markedReview && (node.kind === "prompt" || node.kind === "gate" || node.kind === "script"))
+    return node.kind === "script" || (markedReview && (node.kind === "prompt" || node.kind === "gate"))
       || (skillName.length > 0 && (node.kind === "prompt" || node.kind === "gate"));
   }
 
@@ -2387,10 +2396,10 @@ export class WorkflowGraphExecutor {
     return configuredName || node.id;
   }
 
-  private async recordNodeProgressStart(taskId: string, node: WorkflowIrNode): Promise<WorkflowNodeProgressLease> {
+  private async recordNodeProgressStart(taskId: string, node: WorkflowIrNode, progressId = node.id): Promise<WorkflowNodeProgressLease> {
     const startedAt = new Date().toISOString();
     const result: WorkflowStepResult = {
-      workflowStepId: node.id,
+      workflowStepId: progressId,
       workflowStepName: this.workflowNodeProgressName(node),
       phase: node.config?.phase === "post-merge" ? "post-merge" : "pre-merge",
       source: "node",
@@ -2407,6 +2416,7 @@ export class WorkflowGraphExecutor {
     node: WorkflowIrNode,
     started: WorkflowNodeProgressLease | null,
     nodeResult: WorkflowNodeResult,
+    progressId = node.id,
   ): Promise<boolean> {
     const contextPatch = nodeResult.contextPatch ?? {};
     const notRunReason = node.id === PLAN_REVIEW_GROUP_ID
@@ -2418,7 +2428,7 @@ export class WorkflowGraphExecutor {
     performed no check is terminal `skipped` with a fixed reason, never `passed`. Plan Review stays on
     its prior status because a skipped plan result is fail-closed and would create a blocking hold.
     */
-    const status: WorkflowStepResult["status"] = nodeResult.outcome === "success"
+    const status: WorkflowStepResult["status"] = nodeResult.outcome === "success" && !(node.kind === "script" && contextPatch.scriptSucceeded === false)
       ? notRunReason ? "skipped" : "passed"
       : "failed";
     let output = typeof contextPatch.output === "string" ? contextPatch.output : undefined;
@@ -2465,7 +2475,7 @@ export class WorkflowGraphExecutor {
       });
     }
     const recorded = await this.recordOptionalGroupStepResult(taskId, {
-      workflowStepId: node.id,
+      workflowStepId: progressId,
       workflowStepName: this.workflowNodeProgressName(node),
       phase: started?.result.phase ?? (node.config?.phase === "post-merge" ? "post-merge" : "pre-merge"),
       source: "node",
@@ -2490,6 +2500,18 @@ export class WorkflowGraphExecutor {
     if (recorded.scopeCurrent && notRunReason && status === "skipped") {
       const phase = started?.result.phase ?? (node.config?.phase === "post-merge" ? "post-merge" : "pre-merge");
       this.deps.logTaskEntry?.(`[${phase}] Workflow step not executed: ${this.workflowNodeProgressName(node)}`, `${notRunReason}${output ? `\n${output}` : ""}`);
+    }
+    /* FNXC:WorkflowScriptEvidence 2026-09-14-05:54:
+     * The task log sink is best-effort, not a durability ACK. Only publish ordinary script completion
+     * after the result sink acknowledged persistence; preserve skipped and cancelled semantics.
+     */
+    if (node.kind === "script" && recorded.scopeCurrent && recorded.persisted && status !== "skipped") {
+      const phase = started?.result.phase ?? (node.config?.phase === "post-merge" ? "post-merge" : "pre-merge");
+      try {
+        this.deps.logTaskEntry?.(`[${phase}] Workflow step ${status === "passed" ? "completed" : "failed"}: ${progressId}`, output ?? notes);
+      } catch {
+        // FNXC:WorkflowScriptEvidence 2026-09-14-05:57: A best-effort log failure must never retry the command.
+      }
     }
     return recorded.scopeCurrent;
   }

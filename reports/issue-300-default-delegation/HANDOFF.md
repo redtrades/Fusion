@@ -105,3 +105,45 @@ maps CliTaskOutcome to WorkflowNodeResult but drops its exact sessionId. Suggest
 bounded follow-up is an additive node-keyed contextPatch containing that ID on
 terminal returns; no lookup of a latest/task session and no launcher changes.
 No edits to that production file in this correction.
+
+## A2 — exact native session association
+
+Root recorded expanded scope in agents issue300 comments5657780833 and5657793651:
+`executor/run-cli-agent-node.ts`, `executor/run-graph-custom-node.ts`, and focused
+receipt tests. Implemented in a separate commit after snapshot correction
+f3430e17945f747a701cb010a9dd42c3e1ab47f0.
+
+`CliTaskOutcome.sessionId` from the actual awaited native session result now travels
+in `contextPatch["node:<runtimeNodeId>:cliSessionId"]` for success, killed,
+auth-failed, user-exited and needs-attention. Existing classifications, success
+reaping and session-handle cleanup are unchanged. Runtime/worktree/adapter/capacity
+refusals provide no receipt. Native session exceptions retain existing propagation.
+No new launcher, session enumeration, latest-session inference or persistence write.
+The overlay must verify this exact native store record against its admitted run and
+lease before CAS persistence; this mapping does not prove that adoption itself.
+
+Negative finding: foreach retains the original template node.id.
+executeMaterializedTemplateNode instead writes graph context's
+`workflow:node-instance-id`. A template-only receipt key would collide. The native
+runGraphCustomNode call site now forwards that host context identity as an optional
+argument; absent context falls back to top-level node.id. Plugins receive no new
+identity override capability. Tests use the real materializedTemplateNodeId resolver
+and runGraphCustomNode call site to prove distinct iteration keys and top-level
+fallback, with launch stubbed rather than inference invoked.
+
+TDD evidence: the initial terminal-mapping fixture failed5 cases, and adding the
+foreach call-site fixture produced the additional intended failure, before the
+implementation. Logs `/tmp/fusion300-receipt-red.log` and
+`/tmp/fusion300-receipt-red2.log`. Final relevant regression run passed87 tests across
+6 files (`/tmp/fusion300-receipt-final-tests.log`). Engine typecheck, both changed
+production files' ESLint, changeset format and git diff checks passed
+(`/tmp/fusion300-receipt-types.log`, `/tmp/fusion300-receipt-lint.log`).
+No full Build/Gate claim on this new revision; the earlier full evidence remains
+pinned to b49fad7. Changed-source review and live acceptance remain outstanding.
+
+Claude independently PASSed snapshot correction f3430e17945f747a701cb010a9dd42c3e1ab47f0
+in issue300 comment5657810536. Its N2 documentation clarification is included here:
+prototype contents and structurally equal alias replacement are outside admission
+comparison, consistent with the trusted in-process boundary. N1 Buffer/typed-array
+compatibility must be checked against actual production context before acceptance;
+no speculative binary support was added. N3 traversal-cost profiling is deferred.

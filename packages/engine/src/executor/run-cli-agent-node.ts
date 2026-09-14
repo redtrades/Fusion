@@ -42,6 +42,7 @@ export async function runCliAgentNode(
   node: WorkflowIrNode,
   live: TaskDetail,
   cfg: Record<string, unknown>,
+  runtimeNodeId: string = node.id,
 ): Promise<WorkflowNodeResult> {
   const runtime = deps.cliAgentRuntime;
   if (!runtime) {
@@ -122,23 +123,28 @@ export async function runCliAgentNode(
     }
   }
 
+  // FNXC:PluginNativeSessionReceipt 2026-09-14-01:32:
+  // Carry this exact completed native session through runDefault, including
+  // failed/cancelled outcomes. Host graph context supplies the concrete foreach
+  // identity; prelaunch refusals never fabricate a session receipt.
+  const contextPatch = { [`node:${runtimeNodeId}:cliSessionId`]: outcome.sessionId };
   switch (outcome.kind) {
     case "success":
       // Reap the PTY at the execute→in-review handoff (autoMerge:false tasks
       // don't hold slots): graceful kill, record terminationReason "completed".
       await deps.reapCliTaskSessionForHandoff(session, live.id);
-      return { outcome: "success", value: "cli-agent-done" };
+      return { outcome: "success", value: "cli-agent-done", contextPatch };
     case "killed":
       // Hard cancel already moved the task + killed the PTY via the abort path;
       // just unwind the graph walk.
-      return { outcome: "failure", value: "cli-agent-killed" };
+      return { outcome: "failure", value: "cli-agent-killed", contextPatch };
     case "auth-failed":
-      return { outcome: "failure", value: "cli-agent-auth-failed" };
+      return { outcome: "failure", value: "cli-agent-auth-failed", contextPatch };
     case "user-exited":
-      return { outcome: "failure", value: "cli-agent-user-exited" };
+      return { outcome: "failure", value: "cli-agent-user-exited", contextPatch };
     case "needs-attention":
     default:
-      return { outcome: "failure", value: "cli-agent-needs-attention" };
+      return { outcome: "failure", value: "cli-agent-needs-attention", contextPatch };
   }
 }
 

@@ -381,7 +381,12 @@ export async function runGraphCustomNode(
     // executeWorkflowStep / model machinery. It is write-capable (the agent edits
     // the worktree), so it requires a task worktree like any coding node.
     if (executorKind === "cli-agent") {
-      return deps.runCliAgentNode(node, await deps.store.getTask(live.id), cfg);
+      // FNXC:PluginNativeSessionReceipt 2026-09-14-01:32:
+      // Template node.id is reused across foreach iterations. Pass the host's
+      // admitted concrete identity so native session receipts cannot collide.
+      const instanceId = graphContext?.["workflow:node-instance-id"];
+      const runtimeNodeId = typeof instanceId === "string" && instanceId.length > 0 ? instanceId : node.id;
+      return deps.runCliAgentNode(node, await deps.store.getTask(live.id), cfg, runtimeNodeId);
     }
 
     // Fast mode bypasses pre-merge automated review/validation gates. Custom

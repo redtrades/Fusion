@@ -106,7 +106,8 @@ export interface WorkflowNodeHandlerInput {
    * FNXC:PluginNativeDelegation 2026-09-14-01:26:
    * Admission compares own property descriptors and Date/Map/Set/RegExp state;
    * accessors and function/class capabilities retain identity without evaluation.
-   * Private fields and closure state remain opaque. Proxies, weak collections,
+   * Trusted in-process API: prototype contents, private fields and closures are
+   * opaque; structurally equal replacement aliases compare equal. Proxies, weak collections,
    * promises and binary buffers/views cannot be admission data for delegation.
    * Rethrow native errors unchanged to preserve native retry/suspension handling;
    * wrapping an error changes it to a plugin failure. Explicit failure may absorb it.

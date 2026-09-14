@@ -1,3 +1,5 @@
+import { deriveCodexTaskSandbox, type CodexTaskSandbox } from "./codex-task-sandbox.js";
+import { isDeepStrictEqual } from "node:util";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { superviseSpawn } from "@fusion/core";
 import { homedir } from "node:os";
@@ -41,6 +43,7 @@ export class CodexAppServerSession {
   private completion?: { id: string; status: string };
   private complete?: { resolve: () => void; reject: (error: Error) => void };
   private nativeIdentity?: CodexNativeIdentity;
+  private taskSandbox?: CodexTaskSandbox;
   get identity(): CodexNativeIdentity | undefined { return this.nativeIdentity && { ...this.nativeIdentity }; }
   get pid(): number | undefined { return this.child.pid; }
   readonly exited: Promise<{ exitCode: number; signal: number | undefined }>;
@@ -77,13 +80,14 @@ export class CodexAppServerSession {
 
     await this.request("initialize", { clientInfo: { name: "fusion_native_codex", version: "1" }, capabilities: { experimentalApi: true } });
     this.send({ method: "initialized", params: {} });
-    const cwd = this.options.codexSandbox ? await realpath(this.options.cwd) : this.options.cwd;
+    this.taskSandbox = this.options.codexSandbox ? await deriveCodexTaskSandbox(this.options.cwd) : undefined;
+    const cwd = this.taskSandbox?.cwd ?? this.options.cwd;
     const sandbox = this.options.codexSandbox ? { sandbox: "workspace-write", runtimeWorkspaceRoots: [cwd], config: {
-      "sandbox_workspace_write.writable_roots": [], "sandbox_workspace_write.network_access": false,
+      "sandbox_workspace_write.writable_roots": this.taskSandbox!.writableRoots, "sandbox_workspace_write.network_access": false,
       "sandbox_workspace_write.exclude_tmpdir_env_var": true, "sandbox_workspace_write.exclude_slash_tmp": true,
     } } : {};
     const response = await this.request("thread/start", { cwd, ...sandbox, ...(this.options.model ? { model: this.options.model } : {}), ...(this.options.modelProvider ? { modelProvider: this.options.modelProvider } : {}), ephemeral: false, allowProviderModelFallback: false });
-    if (this.options.codexSandbox) await this.verifySandbox(response, cwd);
+    if (this.taskSandbox) { await this.assertCurrentSandbox(); await this.verifySandbox(response, cwd); }
     const thread = object(response.thread);
     if (typeof thread.id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(thread.id) || thread.id !== thread.sessionId || thread.ephemeral !== false) throw new Error("Unsupported Codex root-thread identity");
     if (typeof thread.path !== "string" || !isAbsolute(thread.path) || thread.path.length > 4096) throw new Error("Codex native rollout path unavailable");
@@ -100,8 +104,8 @@ export class CodexAppServerSession {
     this.check(); this.nativeIdentity = identity;
   }
   /**
-   * FNXC:AuthorSandbox 2026-09-14-07:52: Author tools may write only the native
-   * task worktree. Effective policy is checked before identity admission, not
+   * FNXC:AuthorSandbox 2026-09-14-07:52: Author tools may write the native
+   * task worktree and bounded native Git administration. Effective policy is checked before identity admission, not
    * inferred from requested settings; unknown permission profiles fail closed.
    */
   private async verifySandbox(response: Record<string, unknown>, cwd: string): Promise<void> {
@@ -111,9 +115,23 @@ export class CodexAppServerSession {
       || response.activePermissionProfile !== null) throw new Error("Codex author sandbox policy mismatch");
     const roots = response.runtimeWorkspaceRoots;
     if (!Array.isArray(roots) || roots.length !== 1 || !Array.isArray(policy.writableRoots)) throw new Error("Codex author sandbox roots unavailable");
-    for (const root of [...roots, ...policy.writableRoots]) {
-      if (typeof root !== "string" || !isAbsolute(root) || await realpath(root) !== cwd) throw new Error("Codex author sandbox root mismatch");
+    if (typeof roots[0] !== "string" || !isAbsolute(roots[0]) || await realpath(roots[0]) !== cwd) throw new Error("Codex author sandbox root mismatch");
+    const expected = new Set(this.taskSandbox!.writableRoots), actual = new Set<string>();
+    if (policy.writableRoots.length > expected.size + 1) throw new Error("Codex author sandbox root mismatch");
+    for (const root of policy.writableRoots) {
+      if (typeof root !== "string" || !isAbsolute(root)) throw new Error("Codex author sandbox root mismatch");
+      const path = await canonicalFuturePath(root);
+      if (path !== cwd && !expected.has(path)) throw new Error("Codex author sandbox root mismatch");
+      if (path !== cwd) actual.add(path);
     }
+    if (actual.size !== expected.size) throw new Error("Codex author sandbox roots incomplete");
+  }
+  private async assertCurrentSandbox(): Promise<void> {
+    if (!this.taskSandbox) return;
+    try {
+      if (!isDeepStrictEqual(await deriveCodexTaskSandbox(this.options.cwd), this.taskSandbox)) throw new Error("Native Git sandbox binding changed");
+      this.check();
+    } catch (error) { this.fail(error); throw error; }
   }
   async turn(text: string): Promise<void> {
     await this.ready(); this.check();

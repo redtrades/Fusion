@@ -1,3 +1,4 @@
+import { createCodexSandboxRepo } from "../__test-utils__/codex-sandbox-repo.js";
 import { afterEach, expect, it, vi } from "vitest";
 import { EventEmitter } from "node:events";
 import { chmod, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
@@ -19,8 +20,10 @@ vi.mock("node:child_process", async importOriginal => {
 const cleanup: Array<() => Promise<unknown> | void> = [];
 afterEach(async () => { for (const release of cleanup.splice(0).reverse()) await release(); });
 async function fixture(hard = 100, admissionGate = Promise.resolve(), drainGate = Promise.resolve(), invalidateAfterAdmission?: "ownership" | "budget", sandbox = false) {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "fusion-structured-fixture-")));
-  cleanup.push(() => rm(root, { recursive: true, force: true }));
+  const base = await realpath(await mkdtemp(join(tmpdir(), "fusion-structured-fixture-")));
+  cleanup.push(() => rm(base, { recursive: true, force: true }));
+  const git = sandbox ? await createCodexSandboxRepo(base) : undefined;
+  const root = git?.task ?? base;
   const nativeId = "01a09e41-4fbc-73f3-96db-73cd2e58a8e2", transcript = join(root, ".codex", "sessions", "future.jsonl"), receipt = join(root, "turn-receipt.json");
   const command = join(root, "synthetic-native.cjs");
   await writeFile(command, `#!${process.execPath}
@@ -29,7 +32,7 @@ const fs=require('node:fs'),rl=require('node:readline').createInterface({input:p
 let threadStart; const send=x=>process.stdout.write(JSON.stringify(x)+'\\n');
 rl.on('line',line=>{const q=JSON.parse(line);if(!q.id)return;
 if(q.method==='initialize')return send({id:q.id,result:{}});
-if(q.method==='thread/start')return threadStart=q.params,send({id:q.id,result:{runtimeWorkspaceRoots:[${JSON.stringify(root)}],sandbox:{type:'workspaceWrite',writableRoots:[],networkAccess:false,excludeTmpdirEnvVar:true,excludeSlashTmp:true},activePermissionProfile:null,model:'chosen',modelProvider:'openai',cwd:${JSON.stringify(root)},thread:{id:${JSON.stringify(nativeId)},sessionId:${JSON.stringify(nativeId)},path:${JSON.stringify(transcript)},cwd:${JSON.stringify(root)},ephemeral:false}}});
+if(q.method==='thread/start')return threadStart=q.params,send({id:q.id,result:{runtimeWorkspaceRoots:[${JSON.stringify(root)}],sandbox:{type:'workspaceWrite',writableRoots:${JSON.stringify(git?.roots ?? [])},networkAccess:false,excludeTmpdirEnvVar:true,excludeSlashTmp:true},activePermissionProfile:null,model:'chosen',modelProvider:'openai',cwd:${JSON.stringify(root)},thread:{id:${JSON.stringify(nativeId)},sessionId:${JSON.stringify(nativeId)},path:${JSON.stringify(transcript)},cwd:${JSON.stringify(root)},ephemeral:false}}});
 if(q.method==='turn/start'){
 fs.writeFileSync(${JSON.stringify(receipt)},JSON.stringify({method:q.method,threadId:q.params.threadId,threadStart}));
 send({id:q.id,result:{turn:{id:'turn-1'}}});send({method:'turn/completed',params:{threadId:${JSON.stringify(nativeId)},turn:{id:'turn-1',status:'completed'}}});

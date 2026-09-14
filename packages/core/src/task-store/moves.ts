@@ -1,3 +1,4 @@
+import { assertProtectedTaskMergeSnapshot, ProtectedTaskMergeRefusal } from "../merge/task-merge.js";
 import { holdWorkflowOverlayTerminalInTransaction } from "./workflow-overlay-release.js";
 /**
  * Task move/lifecycle transition operations.
@@ -522,8 +523,15 @@ export async function handoffToReviewImpl(store: TaskStore, taskId: string, opts
   }
 
 export async function moveTaskInternalImpl(store: TaskStore, id: string, toColumn: ColumnId, options: MoveTaskOptions | undefined, internal: MoveTaskInternalOptions, currentTask?: Task,): Promise<Task> {
+  if (options?.protectedMerge) {
+    if (!store.asyncLayer) throw new ProtectedTaskMergeRefusal("merge-authority-unavailable");
+  }
     const dir = store.taskDir(id);
     let task = currentTask ?? await store.readTaskForMove(id);
+    if (options?.protectedMerge) {
+      const selected = await store.getTaskWorkflowSelectionAsync(id);
+      assertProtectedTaskMergeSnapshot(task, selected?.workflowId, options.protectedMerge);
+    }
     /*
     FNXC:TaskMovement 2026-06-22-18:20:
     Public moveTask calls without an explicit source keep the legacy emitted source of "engine", but they do not inherit workflow guard bypass. Engine, scheduler, handoff, and recovery call sites opt into bypass semantics with an explicit moveSource or skipMergeBlocker.
@@ -1333,6 +1341,24 @@ export async function moveTaskInternalImpl(store: TaskStore, id: string, toColum
         } as Task;
       }
       const capacityWorkflowId = await readTaskWorkflowSelectionInTransaction(tx, layer.projectId, id);
+      if (options?.protectedMerge) {
+        const [locked] = await tx.select({id:schema.project.tasks.id}).from(schema.project.tasks)
+          .where(and(eq(schema.project.tasks.id,id),eq(schema.project.tasks.projectId,layer.projectId!))).for("update");
+        const row = locked && await readTaskRowInTransaction(tx,id,{includeDeleted:true},layer.projectId);
+        const current = row ? store.rowToTask(store.pgRowToTaskRow(row)) : null;
+        assertProtectedTaskMergeSnapshot(current,capacityWorkflowId,options.protectedMerge);
+        if (toColumn !== (moveLifecycle?.complete ?? "done") || current?.prInfo?.status !== "merged"
+            || current.prInfo.headOid !== options.protectedMerge.expectedHeadOid
+            || current.prInfo.number !== task.prInfo?.number || current.prInfo.url !== task.prInfo?.url) {
+          throw new ProtectedTaskMergeRefusal("merge-authority-unavailable");
+        }
+        // The caller has refreshed provider confirmation; publish it atomically with native completion.
+        task.prInfo = current.prInfo;
+        task.mergeDetails = {...current.mergeDetails, mergeConfirmed:true,
+          landedBranchTipSha:options.protectedMerge.expectedHeadOid, mergedAt:new Date().toISOString()};
+        task.status = undefined; task.mergeRetries = 0; task.mergeTransientRetryCount = 0;
+      }
+
       const capacityPoolId = resolveCapacityPoolId(capacityWorkflowId);
       const capacityIr = await resolveWorkflowIrForSelectedWorkflowId(store, capacityWorkflowId);
       if (capacityIr && fromColumn !== toColumn) {

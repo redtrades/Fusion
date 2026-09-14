@@ -114,8 +114,20 @@ export interface TransitionPrimitiveInput {
   preserveProgress?: boolean;
 }
 
+/** FNXC:ProtectedMerge 2026-09-14-06:42: Only an earlier admitted gate may publish this graph-scoped proof. */
+export const PROTECTED_WORKFLOW_MERGE_CONTEXT_KEY = "workflow:protected-merge";
+export interface ProtectedWorkflowMergeContextProof {
+  expectedHeadOid: string;
+  admission: import("@fusion/core").ProtectedTaskMergeFence["admission"];
+  taskId: string;
+  workflowId: string;
+  runId: string;
+}
 export interface MergePrimitiveInput {
+  /** Registered selected workflow ID, independent of the interpreter display-name context. */
+  workflowId?: string;
   expectedHeadOid?: string;
+  admission?: import("@fusion/core").ProtectedTaskMergeFence["admission"];
   manualAllowed?: boolean;
 }
 

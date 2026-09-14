@@ -324,6 +324,8 @@ export { __setTaskActivityLogLimitsForTesting } from "./task-store/comments.js";
 
 /** @internal Extracted to task-store/moves.ts */
 export interface MoveTaskOptions {
+  /** FNXC:ProtectedMerge 2026-09-14-06:42: Checked again under the native Reset lock before completion. */
+  protectedMerge?: import("./merge/task-merge.js").ProtectedTaskMergeFence;
   preserveResumeState?: boolean;
   preserveProgress?: boolean;
   preserveWorktree?: boolean;

@@ -1725,7 +1725,10 @@ export class WorkflowGraphExecutor {
           aggregate = sourceResult;
           continue;
         }
-        if (target && isMergeRegionKind(target.kind)) {
+        // Protected custom merge nodes must reach their own admitted handler and exact-head proof.
+        // Legacy workflows retain the collapsed merge-region behavior.
+        const protectedMergeAttempt = target?.kind === "merge-attempt" && target.config?.requireProtectedMerge === true;
+        if (target && isMergeRegionKind(target.kind) && !protectedMergeAttempt) {
           if (this.isRunAborted()) {
             return this.withEnginePauseAbortContext(node, {
               outcome: "failure",

@@ -1,0 +1,7 @@
+check-cli-runtime-routing: ok
+[check-runtime-skill-loader-drift] Claude and Grok loaders match as a clean rename-diff (342 lines).
+✅ @fusion/dashboard mock completeness: all hardcoded mocks cover source imports.
+✅ @fusion/engine mock completeness: all hardcoded mocks cover source imports.
+check-capacity-pool-id: ok (1678 files inspected)
+inert-sync-lane: 0 guard(s) consuming a sync-resolved lane across 0 file(s)
+[static-gate] 16 validators passed

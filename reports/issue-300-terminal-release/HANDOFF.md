@@ -32,3 +32,13 @@ The primitive assumes a trusted caller. Checkout possession or a resumeActor str
 Initial failures were test-fixture issues: native false pause is projected as undefined; correct listing API is listWorkflowWorkItemsForTask; newly added builder needed a reachable edge. Fixed those assertions/fixtures without weakening runtime fences. Initial typecheck required a checked parser boundary cast from database jsonb unknown.
 
 Metadata alone survives Reset and cannot authorize release. xmin cannot authorize a legitimate new checkout. Generic continuation replacement can recreate terminal rows: this release seam checks durable replay/target collisions before calling it. Actor authorization and overlay checkpoint consumption remain separate integration gates. No public push, native lifecycle policy exception, inference, credentials or live database access.
+
+## Coordinator integration receipt
+
+Exact source `f5bf2d043e423bd34cc734a98bd8cbfe684c6d7b` received independent supplied-diff PASS through Hermes. Actual native usage: provider nous, model upstage/solar-pro4:free, 2 calls, 11,094 total tokens, estimated USD 0, no configured fallback or auxiliary compression. Raw verdict and usage retained at `/tmp/agents-intent-alignment-20260914/native-f5bf2d043-hermes/`. Reviewer did not run tests; its prose inaccurately says three tests, so use actual test logs for counts.
+
+Integrated locally as `1abbacb4f` atop diagnostic-doc commit `0a9db6215`. Coordinator independently reran 23 actual PostgreSQL tests (21 core, 2 engine), zero failures, using `/tmp/fusion300-release-composed-pg-run.mjs`; output `/tmp/fusion300-release-composed-pg.log`. Ephemeral database stopped. No public push or deployment.
+
+Exact overlay bbbc543 still needs terminal same-column mapping, real native node placement, fresh lease preparation and failed-node release retry behavior. Current source primitive cannot by itself establish those integration results. Main Board display implementation is separate and read-only.
+
+Coordinator also rebuilt core and engine successfully after composition. Build logs: `/tmp/fusion300-release-composed-core-build.log` and `/tmp/fusion300-release-composed-engine-build.log`.

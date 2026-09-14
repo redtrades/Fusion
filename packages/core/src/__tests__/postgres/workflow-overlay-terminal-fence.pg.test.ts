@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
+import { sql } from "drizzle-orm";
+import * as persistence from "../../task-store/async/async-persistence.js";
 import { TaskStore } from "../../store.js";
 import { pgDescribe, createSharedPgTaskStoreTestHarness } from "../../__test-utils__/pg-test-harness.js";
 
@@ -69,6 +71,62 @@ pgDescribe("workflow overlay terminal transition", () => {
     await expect(store.applyWorkflowOverlayTerminalFenced(t.id, input)).resolves.toMatchObject({ applied: true, replayed: true });
     expect((await store.getTask(t.id)).sourceMetadata?.procedureEngineLive).toMatchObject({ runs: { "graph-a": input.nextState } });
     expect(JSON.parse(await readFile(join(store.taskDir(t.id), "task.json"), "utf8")).sourceMetadata?.procedureEngineLive).toMatchObject({ runs: { "graph-a": input.nextState } });
+  });
+  // FNXC:WorkflowOverlay 2026-09-14-02:09: Any committed row mutation supersedes terminal acknowledgement; cleanup cannot overwrite that writer or replay lifecycle dispatch.
+  it("refuses replay after an ordinary writer changes the row before postcommit cleanup", async () => {
+    const t = await task(); const store = h.store();
+    const other = new TaskStore(h.rootDir(), undefined, { asyncLayer: h.layer() });
+    const original = store.writeTaskJsonFile;
+    let interleaved = false; let moveEvents = 0;
+    const onMove = () => { moveEvents += 1; };
+    store.on("task:moved", onMove);
+    store.writeTaskJsonFile = async (...args) => {
+      await original.apply(store, args);
+      if (interleaved) return;
+      interleaved = true;
+      await other.updateTask(t.id, { sourceMetadataPatch: { ordinaryWriter: "preserve-me" } });
+    };
+    try {
+      await expect(store.applyWorkflowOverlayTerminalFenced(t.id, request())).resolves.toMatchObject({ applied: true });
+      expect(interleaved).toBe(true);
+      const before = await h.adminSql()`SELECT source_metadata, transition_pending, xmin::text AS revision FROM project.tasks WHERE id = ${t.id}`;
+      const metadata = before[0].source_metadata;
+      expect(metadata.ordinaryWriter).toBe("preserve-me");
+      expect(metadata.procedureEngineLive.runs["graph-a"].writeFence.terminal.rowRevision).not.toBe(before[0].revision);
+      expect(before[0].transition_pending).not.toBeNull();
+      const audits = await h.adminSql()`SELECT count(*)::int AS n FROM project.run_audit_events WHERE mutation_type = 'task:move'`;
+      expect(moveEvents).toBe(1);
+      await expect(store.applyWorkflowOverlayTerminalFenced(t.id, request())).resolves.toEqual({ applied: false, reason: "transition-superseded" });
+      const after = await h.adminSql()`SELECT source_metadata, transition_pending, xmin::text AS revision FROM project.tasks WHERE id = ${t.id}`;
+      expect(after).toEqual(before);
+      expect(moveEvents).toBe(1);
+      expect(await h.adminSql()`SELECT count(*)::int AS n FROM project.run_audit_events WHERE mutation_type = 'task:move'`).toEqual(audits);
+    } finally { store.writeTaskJsonFile = original; store.off("task:moved", onMove); }
+  });
+  // FNXC:WorkflowOverlay 2026-09-14-02:09: A real nested PostgreSQL transaction gives the upsert a child xmin; the native guard must roll back metadata and column rather than trust the parent xid.
+  it("rolls back a terminal upsert whose actual xmin belongs to a subtransaction", async () => {
+    const t = await task(); const original = persistence.upsertTaskRowInTransaction;
+    let parentRevision: string | undefined; let writtenRevision: string | undefined;
+    const spy = vi.spyOn(persistence, "upsertTaskRowInTransaction").mockImplementation(async (tx, record, context, projectId) => {
+      const parent = await tx.execute(sql`SELECT (txid_current() % 4294967296)::text AS revision`);
+      parentRevision = String(parent[0].revision);
+      await tx.transaction(async child => {
+        await original(child, record, context, projectId);
+        const written = await child.execute(sql`SELECT xmin::text AS revision FROM project.tasks WHERE id = ${t.id}`);
+        writtenRevision = String(written[0].revision);
+      });
+    });
+    try {
+      await expect(h.store().applyWorkflowOverlayTerminalFenced(t.id, request())).resolves.toEqual({ applied: false, reason: "transition-superseded" });
+      expect(parentRevision).toBeDefined(); expect(writtenRevision).toBeDefined();
+      expect(writtenRevision).not.toBe(parentRevision);
+      const unchanged = await h.store().getTask(t.id);
+      expect(unchanged.column).toBe("todo"); expect(unchanged.sourceMetadata?.procedureEngineLive).toBeUndefined();
+      const rows = await h.adminSql()`SELECT transition_pending FROM project.tasks WHERE id = ${t.id}`;
+      expect(rows[0].transition_pending).toBeNull();
+      const audits = await h.adminSql()`SELECT count(*)::int AS n FROM project.run_audit_events WHERE mutation_type = 'task:move'`;
+      expect(audits[0].n).toBe(0);
+    } finally { spy.mockRestore(); }
   });
   it("rejects stale owners and an invalid target without publishing checkpoint metadata", async () => {
     const t = await task();

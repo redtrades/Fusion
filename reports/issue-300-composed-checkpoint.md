@@ -17,10 +17,13 @@ exists. Logs: `/tmp/fusion300-composed-0ad9-verification/SUMMARY.md`.
 
 ## Separate Hermes compatibility lane
 
-`bc6fb63ef2ea43b03b2e46dbc3e1e16c77634076` remains in the isolated
-`/Users/man/worktrees/Fusion/300-hermes-runtime-receipts` checkout, not composed here.
+`bc6fb63ef2ea43b03b2e46dbc3e1e16c77634076` and follow-up
+`ed6aa40896008746721703f656c0ed201dca4c75` were composed here as
+`f35a7a3702ea3d08d0f61dea30a63d5fe88d634d`.
 It forwards cancellation and optionally captures exact-session cumulative usage.
-Worker verification: 89 plugin tests, build and typecheck passed. The installed
+Coordinator verification on the composition: 91 plugin tests and typecheck passed.
+Receipt cancellation is now a sanitized AbortError, and public documentation
+explicitly describes snapshot lifetime. The installed
 Hermes 0.21.2 exporter interoperated with the reader using an isolated synthetic
 SessionDB row, zero messages and no inference. A real pre-abort subprocess check
 confirmed no child launch.
@@ -33,8 +36,14 @@ Independent Nous Solar free-only source review and one reconsideration both
 returned FIX. Raw results remain unchanged under
 `/tmp/agents-intent-alignment-20260914/hermes-plugin-bc6fb63-review/` and
 `hermes-plugin-bc6fb63-reconsideration/`. Source disposition disproves missing
-abort checks/listener cleanup; receipt retention and generic cancellation errors
-remain review concerns. No independent PASS or completed D6 acceptance is claimed.
+abort checks/listener cleanup. Those FIX verdicts apply to the earlier revision.
+A subsequent Antigravity source review passed exact ed6aa408 against e89; its full
+result is retained at
+`/tmp/agents-intent-alignment-20260914/hermes-plugin-ed6aa408-gemini/`.
+The CLI requested Gemini 3.8 Flash high; the response reports no actual model
+field. Invented scratch-file URLs in that review are not source evidence; its
+claims were checked against the supplied committed files. This review does not
+prove live runtime acceptance or independently attested provider identity.
 
 ## Open work and constraints
 

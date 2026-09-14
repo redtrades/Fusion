@@ -2,6 +2,7 @@ import * as persistence from "../../task-store/async/async-persistence.js";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { createSharedPgTaskStoreTestHarness, pgDescribe } from "../../__test-utils__/pg-test-harness.js";
 import { TaskStore } from "../../store.js";
+import type { StoredWorkflowOverlayState } from "../../task-store/task-mutation-ops.js";
 import type { WorkflowOverlayCurrentTerminal } from "../../task-store/workflow-overlay-release.js";
 
 pgDescribe("native held terminal release", () => {
@@ -12,7 +13,7 @@ pgDescribe("native held terminal release", () => {
   async function claim(id: string, a = currentAdmission) {
     await h.store().updateTask(id, { checkedOutBy: a.agentId, checkoutNodeId: a.nodeId, checkoutRunId: a.runId, checkoutLeaseEpoch: a.leaseEpoch });
   }
-  async function fixture(blockingNodeId = "builder") {
+  async function fixture(blockingNodeId = "builder", phaseCount = 1) {
     const store = h.store();
     const definition = await store.createWorkflowDefinition({ name: "release", layout: {}, ir: { version: "v2", name: "release",
       columns: [{ id: "in-progress", name: "WIP", traits: [{ trait: "wip" }] }],
@@ -21,9 +22,17 @@ pgDescribe("native held terminal release", () => {
     const task = await store.createTask({ description: "release fixture", workflowId: definition.id });
     await claim(task.id, admission);
     const original = await store.replaceActiveTaskWorkflowContinuation({ taskId: task.id, runId: "original", nodeId: "builder", kind: "task", state: "running" });
-    const request = { admission, expectedPhaseCount: 0, expectedColumn: task.column, targetColumn: task.column, operationId: "terminal",
-      nextState: { runId: "graph", claimId: "claim", occurrence: 0, phaseCount: 1, previousEnvelope: null, reviewedHeadOid: null,
-        receipts: [{ terminalBlock: { reason: "missing-input", blockingNodeId, resumeActor: "orchestrator" } }] } };
+    const previousReceipts = Array.from({ length: phaseCount - 1 }, (_, phase) => ({ phase }));
+    if (previousReceipts.length) {
+      await store.updateTask(task.id, { sourceMetadataPatch: { procedureEngineLive: { runs: { graph: {
+        runId: "graph", claimId: "claim", occurrence: 0, phaseCount: previousReceipts.length,
+        previousEnvelope: null, reviewedHeadOid: null, receipts: previousReceipts,
+        writeFence: { admission, operationId: "fixture-history", expectedPhaseCount: previousReceipts.length - 1 },
+      } } } } });
+    }
+    const request = { admission, expectedPhaseCount: phaseCount - 1, expectedColumn: task.column, targetColumn: task.column, operationId: "terminal",
+      nextState: { runId: "graph", claimId: "claim", occurrence: 0, phaseCount, previousEnvelope: null, reviewedHeadOid: null,
+        receipts: [...previousReceipts, { terminalBlock: { reason: "missing-input", blockingNodeId, resumeActor: "orchestrator" } }] } };
     expect(await store.applyWorkflowOverlayTerminalFenced(task.id, request)).toMatchObject({ applied: true });
     const persisted = await store.getTask(task.id);
     const anchor = (persisted.sourceMetadata!.procedureEngineLive as { currentTerminal: WorkflowOverlayCurrentTerminal }).currentTerminal;
@@ -31,6 +40,65 @@ pgDescribe("native held terminal release", () => {
     const release = { expectedTerminalOperationId: "terminal", expectedGraphRunId: "graph", releaseOperationId: "release", admission: currentAdmission, expectedWorkflowIrHash: anchor?.workflowIrHash ?? "absent" };
     return { task, original, anchor, release, request, definition };
   }
+  it.each([254, 255])("releases a %i-phase checkpoint and uses one slot for a fresh hold without reviving old A4", async (phaseCount) => {
+    const { task, request, release, anchor } = await fixture("builder", phaseCount);
+    await claim(task.id);
+    const before = (await h.store().getTask(task.id)).sourceMetadata!.procedureEngineLive as {
+      runs: Record<string, StoredWorkflowOverlayState>; currentTerminal: WorkflowOverlayCurrentTerminal;
+    };
+    expect(await h.store().releaseWorkflowOverlayTerminalFenced(task.id, release)).toMatchObject({ applied: true, replayed: false });
+    // Same current admission forces the old request through prepare.replayed, not merely ownership refusal.
+    expect(await h.store().applyWorkflowOverlayTerminalFenced(task.id, { ...request, admission: currentAdmission }))
+      .toMatchObject({ applied: false, reason: "transition-superseded" });
+    const fresh = { ...request, admission: currentAdmission, expectedPhaseCount: phaseCount, operationId: "capacity-hold",
+      nextState: { ...request.nextState, phaseCount: phaseCount + 1, receipts: [...request.nextState.receipts,
+        { terminalBlock: { reason: "validation-inconclusive", blockingNodeId: "builder", resumeActor: "human" } }] } };
+    const released = (await h.store().getTask(task.id)).sourceMetadata!.procedureEngineLive as typeof before;
+    const { terminal: _oldTerminal, ...otherFence } = before.runs.graph.writeFence;
+    expect(released.currentTerminal).toMatchObject({ ...anchor, state: "released", release: { operationId: "release" } });
+    expect(await h.store().applyWorkflowOverlayTerminalFenced(task.id, { ...fresh, admission }))
+      .toMatchObject({ applied: false, reason: "ownership-mismatch" });
+    const freshResult = await h.store().applyWorkflowOverlayTerminalFenced(task.id, fresh);
+    expect(freshResult).toMatchObject({ applied: true, replayed: false });
+    expect(released.runs.graph).toEqual({ ...before.runs.graph, writeFence: otherFence });
+    expect(await h.store().applyWorkflowOverlayTerminalFenced(task.id, { ...fresh, admission }))
+      .toMatchObject({ applied: false, reason: "transition-superseded" });
+    const held = await h.store().readWorkflowOverlayCurrentTerminal(task.id);
+    expect(held).toMatchObject({ current: true, terminal: { operationId: "capacity-hold", graphRunId: "graph" },
+      terminalBlock: { reason: "validation-inconclusive" } });
+    expect((await h.store().getTask(task.id)).paused).toBe(true);
+  });
+  it("permits 254 to 255 via A3 then 256 via A4, and refuses a write starting at 256", async () => {
+    const { task, request, release } = await fixture("builder", 254); await claim(task.id);
+    expect(await h.store().releaseWorkflowOverlayTerminalFenced(task.id, release)).toMatchObject({ applied: true });
+    const marker = { admission: currentAdmission, expectedPhaseCount: 254, operationId: "marker",
+      nextState: { ...request.nextState, phaseCount: 255, receipts: [...request.nextState.receipts, { marker: true }] } };
+    expect(await h.store().updateWorkflowOverlayStateFenced(task.id, marker)).toMatchObject({ applied: true });
+    const hold = { ...request, admission: currentAdmission, operationId: "capacity-hold", expectedPhaseCount: 255,
+      nextState: { ...marker.nextState, phaseCount: 256, receipts: [...marker.nextState.receipts,
+        { terminalBlock: { reason: "validation-inconclusive", blockingNodeId: "builder", resumeActor: "human" } }] } };
+    expect(await h.store().applyWorkflowOverlayTerminalFenced(task.id, hold)).toMatchObject({ applied: true });
+    expect(await h.store().updateWorkflowOverlayStateFenced(task.id, { ...marker, expectedPhaseCount: 256, operationId: "overflow",
+      nextState: { ...hold.nextState, phaseCount: 257, receipts: [...hold.nextState.receipts, { overflow: true }] } }))
+      .toMatchObject({ applied: false, reason: "invalid-input" });
+    // Also prove the namespace cap, independently of the per-run request-size guard.
+    expect(await h.store().updateWorkflowOverlayStateFenced(task.id, { ...marker, expectedPhaseCount: 0, operationId: "other-run",
+      nextState: { ...marker.nextState, runId: "other-graph", phaseCount: 1, receipts: [{ other: true }] } }))
+      .toMatchObject({ applied: false, reason: "invalid-input" });
+  });
+  it.each(["operation", "graph", "receipt-index"])("refuses release when the checkpoint terminal %s binding disagrees", async (mismatch) => {
+    const { task, release } = await fixture(); await claim(task.id);
+    const namespace = (await h.store().getTask(task.id)).sourceMetadata!.procedureEngineLive as {
+      runs: Record<string, StoredWorkflowOverlayState>; currentTerminal: WorkflowOverlayCurrentTerminal;
+    };
+    if (mismatch === "operation") namespace.runs.graph.writeFence.operationId = "different-terminal";
+    if (mismatch === "graph") namespace.runs.graph.runId = "different-graph";
+    if (mismatch === "receipt-index") namespace.runs.graph.writeFence.expectedPhaseCount = 1;
+    await h.store().updateTask(task.id, { sourceMetadataPatch: { procedureEngineLive: namespace } });
+    expect(await h.store().releaseWorkflowOverlayTerminalFenced(task.id, release))
+      .toMatchObject({ applied: false, reason: "terminal-superseded" });
+    expect((await h.store().getTask(task.id)).paused).toBe(true);
+  });
   it("holds a distinct anchor, admits new checkout, rejects old writer, and replays without resurrection", async () => {
     const { task, original, anchor, release } = await fixture();
     expect((await h.store().getWorkflowWorkItem(original.id))?.state).toBe("succeeded");
@@ -65,11 +133,13 @@ pgDescribe("native held terminal release", () => {
   });
   it("rolls successor publication back when the task row write fails, then retries once", async () => {
     const { task, anchor, release } = await fixture(); await claim(task.id);
+    const before = (await h.store().getTask(task.id)).sourceMetadata;
     await h.adminSql().unsafe(`CREATE FUNCTION project.reject_release() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF OLD.paused AND NOT NEW.paused THEN RAISE EXCEPTION 'release test refusal'; END IF; RETURN NEW; END $$`);
     await h.adminSql().unsafe(`CREATE TRIGGER reject_release BEFORE UPDATE ON project.tasks FOR EACH ROW EXECUTE FUNCTION project.reject_release()`);
     try { await expect(h.store().releaseWorkflowOverlayTerminalFenced(task.id, release)).rejects.toThrow(); }
     finally { await h.adminSql().unsafe("DROP TRIGGER reject_release ON project.tasks"); await h.adminSql().unsafe("DROP FUNCTION project.reject_release()"); }
     expect((await h.store().getTask(task.id)).paused).toBe(true);
+    expect((await h.store().getTask(task.id)).sourceMetadata).toEqual(before);
     expect((await h.store().getWorkflowWorkItem(anchor.heldWorkItemId))?.state).toBe("held");
     const items = await h.store().listWorkflowWorkItemsForTask(task.id);
     expect(items.filter(item => item.runId.startsWith("overlay-release:")).length).toBe(0);

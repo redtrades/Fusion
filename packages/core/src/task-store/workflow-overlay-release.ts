@@ -123,6 +123,11 @@ export async function releaseWorkflowOverlayTerminalFencedImpl(store: TaskStore,
             || task.paused || !isDeepStrictEqual(release.admission, request.admission)) return { applied: false, reason: "terminal-superseded" };
           return { applied: true, task, successor, replayed: true };
         }
+        // FNXC:WorkflowOverlayRelease 2026-09-14-01:20: Retire only this held terminal's fence; native A4 still rejects checkpoint replays after release.
+        if (checkpoint.runId !== terminal.graphRunId || checkpoint.phaseCount !== terminal.receiptIndex + 1
+          || checkpoint.receipts.length !== checkpoint.phaseCount || checkpoint.writeFence?.operationId !== terminal.operationId
+          || checkpoint.writeFence.expectedPhaseCount !== terminal.receiptIndex
+          || checkpoint.writeFence.terminal?.targetColumn !== terminal.column) return { applied: false, reason: "terminal-superseded" };
         if (!await isCurrentHeldTerminal(store, tx, task, terminal, block)) return { applied: false, reason: "terminal-superseded" };
         const collisions = await tx.select({ id: schema.project.workflowWorkItems.id }).from(schema.project.workflowWorkItems)
           .where(and(eq(schema.project.workflowWorkItems.projectId, layer.projectId!), eq(schema.project.workflowWorkItems.taskId, id),
@@ -133,6 +138,7 @@ export async function releaseWorkflowOverlayTerminalFencedImpl(store: TaskStore,
           state: "runnable", sourceColumn: task.column, targetColumn: task.column, irHash: terminal.workflowIrHash,
           stableWorkflowRunId: terminal.graphRunId,
         }, tx);
+        delete checkpoint.writeFence.terminal;
         terminal.state = "released";
         terminal.release = { operationId: request.releaseOperationId, successorId: successor.id, admission: request.admission };
         task.paused = false; task.status = "idle"; task.pausedReason = undefined; task.error = undefined; task.pausedByAgentId = undefined;

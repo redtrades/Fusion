@@ -1,3 +1,4 @@
+import { holdWorkflowOverlayTerminalInTransaction } from "./workflow-overlay-release.js";
 /**
  * Task move/lifecycle transition operations.
  *
@@ -1299,6 +1300,7 @@ export async function moveTaskInternalImpl(store: TaskStore, id: string, toColum
         task.pausedReason = terminalReceipt.reason as string;
         task.error = terminalReceipt.reason as string;
         task.pausedByAgentId = undefined;
+        await holdWorkflowOverlayTerminalInTransaction(store, tx, task, fence.request);
       }
       if (internal.terminalFailureApply) {
         /*

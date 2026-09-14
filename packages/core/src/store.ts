@@ -1,3 +1,4 @@
+import { releaseWorkflowOverlayTerminalFencedImpl, readWorkflowOverlayCurrentTerminalImpl } from "./task-store/workflow-overlay-release.js";
 import { recordCliTokenUsageFencedImpl, type CliTokenUsageWrite, type CliTokenUsageAck } from "./task-store/cli-token-usage-ops.js";
 import { applyWorkflowOverlayTerminalFencedImpl } from "./task-store/moves.js";
 import { EventEmitter } from "node:events";
@@ -2242,6 +2243,14 @@ export class TaskStore extends EventEmitter<TaskStoreEvents> {
     return appendRemediationStepsImpl(this, taskId, steps, options);
   }
   /** FNXC:WorkflowOverlay 2026-09-14-01:40: Persist terminal receipt and its native lifecycle move atomically. */
+  async readWorkflowOverlayCurrentTerminal(id: string): Promise<import("./task-store/workflow-overlay-release.js").WorkflowOverlayCurrentTerminalResult> {
+    return readWorkflowOverlayCurrentTerminalImpl(this, id);
+  }
+
+  async releaseWorkflowOverlayTerminalFenced(id: string, input: import("./task-store/workflow-overlay-release.js").WorkflowOverlayReleaseRequest): Promise<import("./task-store/workflow-overlay-release.js").WorkflowOverlayReleaseResult> {
+    return releaseWorkflowOverlayTerminalFencedImpl(this, id, input);
+  }
+
   async applyWorkflowOverlayTerminalFenced(id: string, input: import("./task-store/moves.js").WorkflowOverlayTerminalWrite): Promise<import("./task-store/moves.js").WorkflowOverlayTerminalResult> {
     return applyWorkflowOverlayTerminalFencedImpl(this, id, input);
   }

@@ -6,6 +6,7 @@
  * session pass `--resume <id>` to continue the conversation.
  */
 
+import { readHermesSessionReceipt } from "./session-receipt.js";
 import { invokeHermesCli, resolveCliSettings } from "./cli-spawn.js";
 import type { HermesCliSettings } from "./cli-spawn.js";
 import type {
@@ -78,8 +79,11 @@ export class HermesRuntimeAdapter implements AgentRuntime {
   async promptWithFallback(
     session: AgentSession,
     prompt: string,
-    _options?: unknown,
+    options?: { signal?: AbortSignal },
   ): Promise<void> {
+    const signal = options?.signal;
+    if (signal?.aborted) throw new Error("hermes: invocation aborted");
+    session.nativeReceipt = undefined;
     const resumeId = session.sessionId || undefined;
     const promptWithContext = resumeId
       ? prompt
@@ -88,7 +92,13 @@ export class HermesRuntimeAdapter implements AgentRuntime {
     session.messages.push(userMessage);
     let result: Awaited<ReturnType<typeof invokeHermesCli>>;
     try {
-      result = await invokeHermesCli(promptWithContext, this.settings, resumeId);
+      result = await invokeHermesCli(promptWithContext, this.settings, resumeId, signal);
+      // Preserve native continuity even if the post-turn export fails.
+      session.sessionId = result.sessionId;
+      if (this.settings.captureSessionReceipt) {
+        session.nativeReceipt = await readHermesSessionReceipt(this.settings, result.sessionId, signal);
+      }
+      if (signal?.aborted) throw new Error("hermes: invocation aborted");
       session.state.errorMessage = undefined;
     } catch (err) {
       session.messages.pop();

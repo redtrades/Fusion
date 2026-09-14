@@ -116,7 +116,7 @@ function parseProfileListOutput(raw: string): HermesProfileSummary[] {
  *
  * This is used to set HERMES_HOME when spawning hermes with a specific profile.
  */
-function hermesProfileHome(profileName: string): string {
+export function hermesProfileHome(profileName: string): string {
   const base = process.env.HERMES_HOME ?? path.join(os.homedir(), ".hermes");
   if (profileName === "default" || profileName === "") return base;
   return path.join(base, "profiles", profileName);
@@ -217,6 +217,8 @@ export interface HermesCliSettings {
    * Empty string / undefined = use the current sticky-default profile.
    */
   profile?: string;
+  /** Opt in to exact cumulative session export after each successful chat turn. */
+  captureSessionReceipt?: boolean;
 }
 
 /** Result of a single hermes CLI invocation. */
@@ -261,6 +263,7 @@ export function resolveCliSettings(settings?: Record<string, unknown>): HermesCl
     yolo: bool(settings?.yolo, "HERMES_YOLO", false),
     cliTimeoutMs: num(settings?.cliTimeoutMs, "HERMES_CLI_TIMEOUT_MS", 300_000),
     profile: str(settings?.profile) ?? str(process.env.HERMES_PROFILE),
+    ...(settings?.captureSessionReceipt === true ? { captureSessionReceipt: true } : {}),
   };
 }
 
@@ -350,6 +353,7 @@ export async function invokeHermesCli(
   resumeSessionId?: string,
   signal?: AbortSignal,
 ): Promise<HermesCliResult> {
+  if (signal?.aborted) throw new Error("hermes: invocation aborted");
   const args = buildHermesArgs(prompt, settings, resumeSessionId);
   const spawnEnv: NodeJS.ProcessEnv = { ...process.env, PYTHONUNBUFFERED: "1" };
   if (settings.profile) {
@@ -357,6 +361,7 @@ export async function invokeHermesCli(
   }
   const launch = await resolveHermesLaunch(settings.binaryPath, args, { env: spawnEnv });
 
+  if (signal?.aborted) throw new Error("hermes: invocation aborted");
   return new Promise<HermesCliResult>((resolve, reject) => {
     let settled = false;
     /*

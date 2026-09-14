@@ -25,5 +25,20 @@ describe("native accounting capability inspection", () => {
     expect(await inspectCliTokenBudget(f.store, f.sessions, { ...query, sessionId: "record" })).toMatchObject({ session: { sessionId: "record", nativeSessionId: "conversation", phase: "drained", workTokens: 4 } });
     f.task.sourceMetadata.cliTokenUsage.owners["codex:conversation"].leaseEpoch = 2;
     await expect(inspectCliTokenBudget(f.store, f.sessions, { ...query, sessionId: "record" })).rejects.toThrow("proof");
+  });  it("exposes only complete drained current-turn evidence without breaking legacy credits", async () => {
+    const f = fixture(), key = "codex:conversation";
+    const identity = { selected: { model: "gpt-a", provider: "openai", source: "codex-thread-start" }, observed: { model: "gpt-a", provider: "openai", source: "codex-turn-context" }, coverage: "complete" };
+    const ledger = { version: 1, sessions: { [key]: {} }, credits: { [key]: { inputTokens: 5, outputTokens: 0, cachedTokens: 0, cacheWriteTokens: 0 } }, owners: { [key]: { sessionId: "record", ...admission } }, cursors: { [key]: { bytes: 100, fileIdentity: "1:2", phase: "drained" } }, identities: { [key]: identity } };
+    f.task.sourceMetadata.cliTokenUsage = ledger;
+    const read = () => inspectCliTokenBudget(f.store, f.sessions, { ...query, sessionId: "record" });
+    expect((await read()).session?.identity).toEqual(identity);
+    ledger.identities[key].coverage = "incomplete";
+    expect((await read()).session).toMatchObject({ workTokens: 5 });
+    expect((await read()).session?.identity).toBeUndefined();
+    ledger.identities[key].coverage = "complete"; ledger.cursors[key].phase = "failed";
+    expect((await read()).session?.identity).toBeUndefined();
+    delete (ledger as any).identities;
+    expect((await read()).session).toMatchObject({ workTokens: 5, phase: "failed" });
   });
+
 });

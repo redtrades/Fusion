@@ -3149,4 +3149,4 @@ export { advanceCliTokenLedger, validateCliTokenLedger, emptyCliTokenCounters, v
 export type { CliTokenCounters, CliTokenLedger } from "./cli/cli-token-usage-types.js";
 
 export type { CliTokenUsageWrite, CliTokenUsageAck } from "./task-store/cli-token-usage-ops.js";
-export type { CliTokenBudgetQuery, CliTokenBudgetInspection } from "./cli/cli-token-usage-types.js";
+export type { CliTokenBudgetQuery, CliTokenBudgetInspection, CliObservedIdentity } from "./cli/cli-token-usage-types.js";

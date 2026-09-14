@@ -21,7 +21,10 @@ export async function inspectCliTokenBudget(store: TaskStore, sessions: CliSessi
     validateCliTokenLedger(ledger);
     const owner = ledger?.owners?.[key], cursor = ledger?.cursors?.[key], credits = ledger?.credits?.[key];
     if (!owner || !cursor || !credits || owner.sessionId !== input.sessionId || owner.runId !== a.runId || owner.leaseEpoch !== a.leaseEpoch || owner.agentId !== a.agentId || owner.nodeId !== a.nodeId) throw new Error("Native CLI accounting proof unavailable");
-    result.session = { sessionId: session.id, nativeSessionId: session.nativeSessionId, phase: cursor.phase, workTokens: credits.inputTokens + credits.outputTokens + credits.cacheWriteTokens };
+    const identity = ledger?.identities?.[key];
+    const complete = cursor.phase === "drained" && identity?.coverage === "complete" && identity.observed
+      && (input.adapterId !== "codex" || (identity.selected && identity.selected.model === identity.observed.model && identity.selected.provider === identity.observed.provider));
+    result.session = { sessionId: session.id, nativeSessionId: session.nativeSessionId, phase: cursor.phase, workTokens: credits.inputTokens + credits.outputTokens + credits.cacheWriteTokens, ...(complete ? { identity: structuredClone(identity) } : {}) };
   }
   return result;
 }

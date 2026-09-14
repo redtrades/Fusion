@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { and, eq, isNull } from "drizzle-orm";
 import type { TaskStore } from "../store.js";
 import type { Task } from "../types.js";
@@ -5,9 +6,10 @@ import * as schema from "../postgres/schema/index.js";
 import { taskProjectScope } from "../postgres/data-layer.js";
 import { readTaskRowInTransaction } from "./async/async-persistence.js";
 import { acquireTaskAdvisoryXactLock } from "./task-advisory-lock.js";
-import { advanceCliTokenLedger, validateCliTokenLedger, CLI_TOKEN_FIELDS, emptyCliTokenCounters, validateCliTokenCursor, type CliTokenCursor, type CliTokenCounters, type CliTokenLedger } from "../cli/cli-token-usage-types.js";
+import { advanceCliTokenLedger, validateCliTokenLedger, CLI_TOKEN_FIELDS, emptyCliTokenCounters, validateCliTokenCursor, validateCliObservedIdentity, type CliObservedIdentity, type CliTokenCursor, type CliTokenCounters, type CliTokenLedger } from "../cli/cli-token-usage-types.js";
 
 export interface CliTokenUsageWrite {
+  identity?: CliObservedIdentity;
   sessionId: string;
   nativeSessionId: string;
   projectId: string;
@@ -35,6 +37,7 @@ export async function recordCliTokenUsageFencedImpl(store: TaskStore, id: string
   if (request.projectId !== layer.projectId) throw new Error("CLI token project mismatch");
   if (!request.sessionId || !request.nativeSessionId || !request.projectId || !request.admission?.runId || !request.admission.agentId || !request.admission.nodeId || !Number.isSafeInteger(request.admission.leaseEpoch) || request.admission.leaseEpoch < 1 || !Array.isArray(request.observations) || request.observations.length > 4096 || !Number.isSafeInteger(request.cursor?.bytes) || request.cursor.bytes < 0 || typeof request.baseline !== "boolean" || Object.values(request.limits).some(value => value !== undefined && (!Number.isSafeInteger(value) || value < 0))) throw new Error("Invalid CLI token request");
   validateCliTokenCursor(request.cursor);
+  if (request.identity) validateCliObservedIdentity(request.identity);
   if (request.reaffirm !== undefined && request.reaffirm !== true) throw new Error("Invalid CLI pending reaffirmation");
   if (request.fresh !== undefined && request.fresh !== true) throw new Error("Invalid CLI fresh admission");
   return store.withTaskLock(id, async () => {
@@ -60,10 +63,18 @@ export async function recordCliTokenUsageFencedImpl(store: TaskStore, id: string
         if (session.adapterId !== "codex" || Object.hasOwn(ledger?.sessions ?? {}, key) || request.baseline || request.observations.length || request.cursor.phase !== "awaiting-file" || request.cursor.fileIdentity !== undefined) throw new Error("CLI fresh admission already used or invalid");
       } else if (request.cursor.transcriptPath && !previousCursor) throw new Error("CLI native future stream lacks admission");
       else if (request.cursor.phase === "awaiting-file") throw new Error("CLI pending cursor requires fresh admission");
+      if (previousCursor?.phase === "failed" && request.cursor.phase !== "failed") throw new Error("Failed CLI token cursor cannot resume");
       if (previousCursor) {
         if (previousCursor.transcriptPath !== request.cursor.transcriptPath || (previousCursor.fileIdentity && previousCursor.fileIdentity !== request.cursor.fileIdentity) || request.cursor.bytes < previousCursor.bytes || (previousCursor.phase === "awaiting-file" && !request.reaffirm && (request.baseline || !request.cursor.fileIdentity))) throw new Error("CLI token stream identity changed");
       }
 
+      const oldIdentity = ledger?.identities?.[key];
+      const nextIdentity = request.identity ?? (oldIdentity && (request.baseline || request.observations.length) ? { ...oldIdentity, coverage: "incomplete" as const } : oldIdentity);
+      if (request.identity && ((oldIdentity?.selected && !isDeepStrictEqual(oldIdentity.selected, request.identity.selected))
+        || (oldIdentity?.observed && !isDeepStrictEqual(oldIdentity.observed, request.identity.observed))
+        || (oldIdentity?.coverage === "incomplete" && request.identity.coverage !== "incomplete"))) throw new Error("CLI observed identity changed");
+      if (nextIdentity?.selected && session.adapterId !== "codex") throw new Error("CLI selected identity adapter mismatch");
+      if (nextIdentity?.observed && nextIdentity.observed.source !== (session.adapterId === "codex" ? "codex-turn-context" : "claude-assistant-message")) throw new Error("CLI observed identity adapter mismatch");
       const baseline = request.baseline && !Object.hasOwn(ledger?.sessions ?? {}, key);
       const delta = emptyCliTokenCounters();
       for (const observation of request.observations) {
@@ -76,7 +87,7 @@ export async function recordCliTokenUsageFencedImpl(store: TaskStore, id: string
       ledger.sessions[key] ??= {};
       const credited = { ...(ledger.credits?.[key] ?? emptyCliTokenCounters()) };
       for (const field of CLI_TOKEN_FIELDS) credited[field] += delta[field];
-      const checkpoint = { ...ledger, credits: { ...ledger.credits, [key]: credited }, owners: { ...ledger.owners, [key]: { sessionId: request.sessionId, ...request.admission } }, cursors: { ...(ledger.cursors ?? {}), [key]: request.cursor } };
+      const checkpoint = { ...ledger, ...(nextIdentity ? { identities: { ...ledger.identities, [key]: nextIdentity } } : {}), credits: { ...ledger.credits, [key]: credited }, owners: { ...ledger.owners, [key]: { sessionId: request.sessionId, ...request.admission } }, cursors: { ...(ledger.cursors ?? {}), [key]: request.cursor } };
       validateCliTokenLedger(checkpoint);
       const totals = emptyCliTokenCounters();
       for (const field of CLI_TOKEN_FIELDS) {

@@ -37,7 +37,7 @@ it("uses the native same-response future path before admitting a turn and correl
   const f = await peer();
   await f.session.ready();
   expect(f.admitted()).toBe(true);
-  expect(f.session.identity).toMatchObject({ nativeSessionId: id, transcriptPath: join(f.cwd, "future.jsonl") });
+  expect(f.session.identity).toMatchObject({ nativeSessionId: id, transcriptPath: join(f.cwd, "future.jsonl"), selectedModel: "chosen", selectedProvider: "openai" });
   await expect(f.session.turn("synthetic fixture only")).resolves.toBeUndefined();
 });
 it.each(["divergent", "null-path", "bad-version", "bad-model", "timeout"])("fails before request for unsupported identity/path: %s", async mode => {

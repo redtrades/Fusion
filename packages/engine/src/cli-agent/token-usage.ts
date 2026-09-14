@@ -1,5 +1,5 @@
 import type { CliTokenCounters } from "@fusion/core";
-export interface CliTokenObservation { key: string; usage: CliTokenCounters }
+export interface CliTokenObservation { key: string; usage: CliTokenCounters; model?: string }
 const object = (value: unknown): Record<string, unknown> | undefined => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 const counter = (row: Record<string, unknown>, key: string, optional = false): number => {
   const value = row[key] ?? (optional ? 0 : undefined);
@@ -27,7 +27,7 @@ export function parseCliTokenUsage(adapter: string, value: unknown): CliTokenObs
     if (row.type !== "assistant" || message?.usage === undefined) return null;
     const usage = object(message.usage);
     if (!usage || typeof message.id !== "string" || !message.id) throw new Error("Invalid Claude message usage identity");
-    return { key: message.id, usage: { inputTokens: counter(usage, "input_tokens"), outputTokens: counter(usage, "output_tokens"), cachedTokens: counter(usage, "cache_read_input_tokens", true), cacheWriteTokens: counter(usage, "cache_creation_input_tokens", true) } };
+    return { key: message.id, ...(typeof message.model === "string" && message.model.trim() && message.model.length <= 256 ? { model: message.model } : {}), usage: { inputTokens: counter(usage, "input_tokens"), outputTokens: counter(usage, "output_tokens"), cachedTokens: counter(usage, "cache_read_input_tokens", true), cacheWriteTokens: counter(usage, "cache_creation_input_tokens", true) } };
   }
   throw new Error("CLI token usage adapter unsupported");
 }

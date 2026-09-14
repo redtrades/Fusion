@@ -10,7 +10,7 @@ const object = (value: unknown): Record<string, unknown> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid Codex RPC object");
   return value as Record<string, unknown>;
 };
-export interface CodexNativeIdentity { nativeSessionId: string; transcriptPath: string }
+export interface CodexNativeIdentity { nativeSessionId: string; transcriptPath: string; selectedModel: string; selectedProvider: string }
 export interface CodexAppServerOptions {
   command: string; args: string[]; cwd: string; env: NodeJS.ProcessEnv;
   model?: string; modelProvider?: string; timeoutMs?: number;
@@ -88,7 +88,7 @@ export class CodexAppServerSession {
     const within = relative(root, path);
     if (!within || within.startsWith("..") || isAbsolute(within)) throw new Error("Codex rollout outside native session storage");
     this.check();
-    const identity = { nativeSessionId: thread.id, transcriptPath: thread.path };
+    const identity = { nativeSessionId: thread.id, transcriptPath: thread.path, selectedModel: response.model, selectedProvider: response.modelProvider };
     await this.options.onIdentity({ ...identity });
     this.check(); this.nativeIdentity = identity;
   }

@@ -330,7 +330,7 @@ export class CliTaskSession {
           },
         },
         settings,
-        ...(structuredCodex ? { codexStructured: { admit: async (identity: { nativeSessionId: string; transcriptPath: string }) => {
+        ...(structuredCodex ? { codexStructured: { admit: async (identity: { nativeSessionId: string; transcriptPath: string; selectedModel: string; selectedProvider: string }) => {
           if (!usageObserver) throw new Error("Native Codex accounting unavailable");
           await usageObserver.admitFresh(identity);
         } } } : {}),

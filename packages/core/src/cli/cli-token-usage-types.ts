@@ -19,8 +19,23 @@ export interface CliTokenCounters {
   cachedTokens: number;
   cacheWriteTokens: number;
 }
+export interface CliObservedIdentity {
+  selected?: { model: string; provider: string; source: "codex-thread-start" };
+  observed?: { model: string; provider?: string; source: "codex-turn-context" | "claude-assistant-message" };
+  coverage?: "complete" | "incomplete";
+}
+export function validateCliObservedIdentity(identity: CliObservedIdentity): void {
+  const text = (value: unknown): boolean => typeof value === "string" && value.trim().length > 0 && value.length <= 256;
+  if (!identity || typeof identity !== "object" || Array.isArray(identity)
+    || Object.keys(identity).some(key => !["selected", "observed", "coverage"].includes(key))
+    || (identity.coverage !== undefined && !["complete", "incomplete"].includes(identity.coverage))) throw new Error("Invalid CLI observed identity");
+  if (identity.selected && (!text(identity.selected.model) || !text(identity.selected.provider) || identity.selected.source !== "codex-thread-start")) throw new Error("Invalid CLI selected identity");
+  if (identity.observed && (!text(identity.observed.model) || (identity.observed.provider !== undefined && !text(identity.observed.provider)) || !["codex-turn-context", "claude-assistant-message"].includes(identity.observed.source))) throw new Error("Invalid CLI observed model");
+  if (identity.coverage === "complete" && !identity.observed) throw new Error("Complete CLI identity requires observed model");
+}
 export interface CliTokenLedger {
   version: 1;
+  identities?: Record<string, CliObservedIdentity>;
   credits?: Record<string, CliTokenCounters>;
   owners?: Record<string, { sessionId: string; runId: string; leaseEpoch: number; agentId: string; nodeId: string }>;
   cursors?: Record<string, CliTokenCursor>;
@@ -34,6 +49,7 @@ export function validateCliTokenCounters(value: unknown): asserts value is CliTo
 export function validateCliTokenLedger(value: unknown): asserts value is CliTokenLedger {
   const ledger = value as CliTokenLedger;
   if (!ledger || ledger.version !== 1 || !ledger.sessions || typeof ledger.sessions !== "object" || Array.isArray(ledger.sessions)) throw new Error("Invalid CLI token ledger");
+  for (const identity of Object.values(ledger.identities ?? {})) validateCliObservedIdentity(identity);
   let count = 0;
   for (const messages of Object.values(ledger.sessions)) {
     if (!messages || typeof messages !== "object" || Array.isArray(messages)) throw new Error("Invalid CLI token ledger");
@@ -81,5 +97,5 @@ export interface CliTokenBudgetInspection {
   hardLimit: number;
   observedWorkTokens: number;
   launchGate: "authenticated-identity-before-prompt" | "native-structured-identity-before-prompt";
-  session?: { sessionId: string; nativeSessionId: string; phase: CliTokenCursor["phase"]; workTokens: number };
+  session?: { sessionId: string; nativeSessionId: string; phase: CliTokenCursor["phase"]; workTokens: number; identity?: CliObservedIdentity };
 }

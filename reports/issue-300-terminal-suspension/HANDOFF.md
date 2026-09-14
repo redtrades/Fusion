@@ -1,0 +1,21 @@
+# Terminal suspension reproduction boundary
+
+Evidence mode: fallback; actual isolated PostgreSQL and native heartbeat resume function. Base 03e92a64769cd699a6a14421290a4d6e0ec3ecc5. Containment-only production change in moves.ts; release remains open.
+
+The two new regression tests in packages/core/src/__tests__/postgres/workflow-overlay-terminal-fence.pg.test.ts fail for the intended reasons: after legal same-column in-progress terminal commit, paused is undefined; actual resumeTaskForAgent calls execute once for that persisted terminal row. The existing ten A4 tests pass. Total 12 tests, 2 failed, 10 passed, zero skipped. /tmp/fusion300-suspension-red.log preserves full output; /tmp/fusion300-suspension-pg-run.mjs started a dedicated ephemeral localhost database and stopped it in finally. No live DB or inference.
+
+Smallest containment insertion: moves.ts's workflowOverlayTerminal transaction immediately after sourceMetadata assignment and before upsert. Persist native paused=true/status=paused/pausedReason/error from a validated existing terminal reason, with the checkpoint under existing advisory/row/lease fencing. Do not assign pausedByAgentId to the worker: assignment-change/heartbeat auto-unpause behavior must not grant accidental release. Preserve legal original column; no named-column acceptance claim.
+
+Release is not complete inside the currently identified seam. pauseTaskImpl (branch-group-ops.ts:280–367) is an ordinary pause/unpause write, with no matching A4 terminal receipt/expected xmin/lease-epoch fence and no checkpoint continuation update. A4 exact replay requires unchanged xmin (moves.ts:68–76), so ordinary unpause supersedes the terminal receipt. Existing dashboard unpause does not supply this absent capability. Reset is not a substitute for continuation.
+
+Parent subsequently authorized a containment-only commit, explicitly separated from release. No new release protocol was added. Integration owner retains the release path and durable continuation scope. Required next tests include stale release vs Reset/new checkout, checkpoint continuation without repeated terminal invocation, and orphan/heartbeat non-dispatch until that explicit release.
+
+## Implemented containment and final verification
+
+The existing A4 transaction now owns and validates the reason from the final production terminalBlock receipt (legacy terminal supported), atomically writes paused=true, status=paused, pausedReason and error with that reason, and clears pausedByAgentId so agent reassignment cannot automatically release it. It does not claim userPaused. Replay requires the committed pause projection as well as the unchanged full-XID/xmin and existing admission/state identity. Invalid/missing reasons fail before mutation. Column policy remains untouched.
+
+Final actual PostgreSQL suite: 13 passed / 1 file, zero skipped; includes actual heartbeat resumeTaskForAgent and orphan resumeOrphaned, exact replay, rollback, concurrent store fencing and Reset supersession. /tmp/fusion300-suspension-final-pg.log. Core row-revision, external-block primitive and manual-pause tests: 10 passed / 3 files, zero skipped (/tmp/fusion300-suspension-core.log). Core tsc --noEmit passed (/tmp/fusion300-suspension-typecheck.log). No complete runtime acceptance or whole-engine gate claim.
+
+Existing narrower release primitive inspected: tasks/task-external-block.ts retains column/node/currentStep/worktree/branch and uses status blocked + externalBlock metadata for genuine host/provider/credentials/network/third-party failures. Dashboard routes/task-external-block-resume.ts publishes a successor continuation while still blocked, then clears the block. Reuse may be appropriate for those external origins after A4/checkpoint fencing integration; budget exhaustion/inconclusive review must not be relabeled external. This primitive is evidence of an existing continuation path, not proof that generic A4 release is solved.
+
+Named-column WS16 acceptance, general scheduler/self-healing sweeps, full release and interrupted native graph continuation remain integration gates. This commit only establishes atomic suspension and non-dispatch through the directly exercised heartbeat/orphan paths.

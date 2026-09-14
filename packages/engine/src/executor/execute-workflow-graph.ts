@@ -45,6 +45,20 @@ import {
 } from "../execution/required-workflow-artifacts.js";
 import { getActiveNotificationService } from "../util/notifier.js";
 
+/** FNXC:WorkflowOverlayRelease 2026-09-14-04:33: Carry the actual selected native continuation even before it has a routed principal; existing principal fields keep their conditional semantics. */
+export function createWorkflowContinuationContext(continuation: WorkflowWorkItem | undefined): Record<string, unknown> | undefined {
+  return continuation ? {
+    "workflow:resumed-work-item-id": continuation.id,
+    ...(continuation.principalAgentId ? {
+      "workflow:work-item-id": continuation.id,
+      "workflow:principal-agent-id": continuation.principalAgentId,
+      "workflow:principal-role": continuation.workflowRole,
+      "workflow:principal-authority": continuation.authorityKind,
+      "workflow:node-instance-id": continuation.nodeInstanceId ?? continuation.nodeId,
+    } : {}),
+  } : undefined;
+}
+
 export function buildWorkflowGateActivityMetadata(
   result: CoreWorkflowStepResult,
   persistedResult: CoreWorkflowStepResult,
@@ -1043,15 +1057,7 @@ export async function executeWorkflowGraph(
          * beforeNodeExecution so recovery validates this exact principal instead
          * of silently choosing a fresh role-pool candidate.
          */
-        const continuationContext = continuation?.principalAgentId
-          ? {
-              "workflow:work-item-id": continuation.id,
-              "workflow:principal-agent-id": continuation.principalAgentId,
-              "workflow:principal-role": continuation.workflowRole,
-              "workflow:principal-authority": continuation.authorityKind,
-              "workflow:node-instance-id": continuation.nodeInstanceId ?? continuation.nodeId,
-            }
-          : undefined;
+        const continuationContext = createWorkflowContinuationContext(continuation);
         /*
          * FNXC:WorkflowExecution 2026-08-08-01:40:
          * Only a TOP-LEVEL node id is a legal resume point. A foreach template node id

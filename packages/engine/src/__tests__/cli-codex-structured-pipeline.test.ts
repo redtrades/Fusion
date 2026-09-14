@@ -18,7 +18,7 @@ vi.mock("node:child_process", async importOriginal => {
 });
 const cleanup: Array<() => Promise<unknown> | void> = [];
 afterEach(async () => { for (const release of cleanup.splice(0).reverse()) await release(); });
-async function fixture(hard = 100, admissionGate = Promise.resolve(), drainGate = Promise.resolve()) {
+async function fixture(hard = 100, admissionGate = Promise.resolve(), drainGate = Promise.resolve(), invalidateAfterAdmission?: "ownership" | "budget") {
   const root = await realpath(await mkdtemp(join(tmpdir(), "fusion-structured-fixture-")));
   cleanup.push(() => rm(root, { recursive: true, force: true }));
   const nativeId = "01a09e41-4fbc-73f3-96db-73cd2e58a8e2", transcript = join(root, ".codex", "sessions", "future.jsonl"), receipt = join(root, "turn-receipt.json");
@@ -45,6 +45,7 @@ setTimeout(()=>{fs.mkdirSync(${JSON.stringify(join(root, ".codex", "sessions"))}
   const hub = new TelemetryHub({ store }); const registry = new CliAdapterRegistry(); registry.register(codexAdapter);
   const manager = new CliSessionManager({ store, registry, loadPty: async () => { throw new Error("Structured native session must not load PTY"); } });
   cleanup.push(() => manager.dispose());
+  let invalidated = false;
   let total = 0, ledger: CliTokenLedger | undefined; const writes: CliTokenUsageWrite[] = [];
   const previousHome = process.env.HOME, previousCodexHome = process.env.CODEX_HOME; process.env.HOME = root; process.env.CODEX_HOME = join(root, ".codex");
   let session;
@@ -52,10 +53,13 @@ setTimeout(()=>{fs.mkdirSync(${JSON.stringify(join(root, ".codex", "sessions"))}
     sessions: store, admission: { runId: "run", leaseEpoch: 1, agentId: "agent", nodeId: "host" }, limits: { hard }, pollMs: 5,
     store: { recordCliTokenUsageFenced: async (_task, input) => {
       if (input.fresh) await admissionGate;
+      if (invalidated && invalidateAfterAdmission === "ownership") throw new Error("CLI token ownership mismatch");
       writes.push(input);
       for (const event of input.observations) { const next = advanceCliTokenLedger(ledger, `codex:${nativeId}`, event.key, event.usage, input.baseline); ledger = next.ledger; total += next.delta.inputTokens + next.delta.outputTokens + next.delta.cacheWriteTokens; }
       if (input.cursor.phase === "drained") await drainGate;
-      return { hardExceeded: total >= hard, observedWorkTokens: total, task: {} as any };
+      const ack = { hardExceeded: total >= hard || (invalidated && invalidateAfterAdmission === "budget"), observedWorkTokens: total, task: {} as any };
+      if (input.fresh) invalidated = true; // A concurrent change immediately after the valid admission commit.
+      return ack;
     } },
   } });
   } finally { process.env.HOME = previousHome; if (previousCodexHome === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = previousCodexHome; }
@@ -103,4 +107,11 @@ it("retains the native task until the final durable accounting acknowledgment", 
     expect(f.session.isSettled).toBe(false); expect(f.manager.isLive(f.session.sessionId)).toBe(true);
     release(); expect(await f.session.result()).toMatchObject({ kind: "success" });
   } finally { release(); }
+});
+
+it.each(["ownership", "budget"] as const)("reaffirms absent-file admission after concurrent %s change before dispatch", async reason => {
+  const f = await fixture(100, Promise.resolve(), Promise.resolve(), reason);
+  expect(await f.session.result()).toMatchObject({ kind: "killed" });
+  await expect(readFile(f.receipt)).rejects.toThrow();
+  await f.exited;
 });

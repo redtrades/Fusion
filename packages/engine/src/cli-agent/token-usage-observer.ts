@@ -85,7 +85,23 @@ export class CliTokenUsageObserver {
   async beforeFirstTurn(): Promise<void> {
     if (!this.fresh || this.stopped || !this.beforeFirstRequest) throw new Error("Fresh native admission unavailable");
     this.beforeFirstRequest = true;
-    this.enqueue(async () => { try { await this.read(false, false); } finally { this.beforeFirstRequest = false; } });
+    this.enqueue(async () => {
+      try {
+        await this.read(false, false);
+        // An absent/empty future file has no read ACK. Reaffirm the same
+        // durable pending checkpoint so Reset/lease/usage changes cannot hide
+        // behind ENOENT. This never creates another fresh0 baseline.
+        if (!this.nativeHeaderVerified) {
+          await this.protection.sessions.flush();
+          const ack = await this.protection.store.recordCliTokenUsageFenced(this.record.taskId!, {
+            sessionId: this.record.id, nativeSessionId: this.identity!.nativeSessionId, projectId: this.record.projectId,
+            admission: this.protection.admission, observations: [], baseline: false, reaffirm: true,
+            cursor: { phase: "awaiting-file", bytes: 0, transcriptPath: this.identity!.transcriptPath }, limits: this.protection.limits,
+          });
+          if (ack.hardExceeded || this.stopped) throw new Error("Native pending admission unavailable or exhausted");
+        }
+      } finally { this.beforeFirstRequest = false; }
+    });
     await this.queue;
     if (this.failure) throw this.failure;
   }

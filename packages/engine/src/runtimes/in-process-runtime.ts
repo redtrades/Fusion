@@ -108,6 +108,30 @@ export function createDiscoveryPluginLoaderOptions(
   };
 }
 
+/**
+ * FNXC:PluginNativeSessionRead 2026-09-14-02:02:
+ * Plugin onLoad precedes CLI runtime construction. Keep a late reader over the
+ * one live engine store, flush its pending writes, fence exact ID/project, and
+ * return detached data so plugins cannot mutate the session cache.
+ */
+export function createProjectCliSessionReader(
+  projectId: string,
+  getStore: () => Pick<BootstrappedCliAgentRuntime["bundle"]["store"], "flush" | "getSession"> | undefined,
+): NonNullable<import("@fusion/core").PluginContext["readCliSession"]> {
+  return async (sessionId) => {
+    const store = getStore();
+    if (!store) throw new Error(`Native CLI session reader unavailable for project ${projectId}`);
+    await store.flush();
+    if (getStore() !== store) throw new Error(`Native CLI session runtime changed for project ${projectId}`);
+    const session = store.getSession(sessionId);
+    if (!session) return undefined;
+    if (session.id !== sessionId || session.projectId !== projectId) {
+      throw new Error(`Native CLI session identity/project mismatch for project ${projectId}`);
+    }
+    return structuredClone(session);
+  };
+}
+
 export function createRuntimePluginMcpProviderOptions(input: {
   hostRootDir: string;
   hostLoader: Pick<PluginLoader, "getPluginMcpServers">;
@@ -1132,6 +1156,7 @@ export class InProcessRuntime
       this.pluginLoader = new PluginLoaderClass({
         pluginStore: this.pluginStore,
         taskStore: this.taskStore,
+        readCliSession: createProjectCliSessionReader(this.config.projectId, () => this.cliAgentRuntime?.bundle.store),
       });
 
       this.pluginRunner = new PluginRunner({

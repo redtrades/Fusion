@@ -11,6 +11,7 @@
  * - PluginInstallation: persisted plugin record
  */
 
+import type { CliSession } from "../cli/cli-session-types.js";
 import type { Database } from "../db/db.js";
 import type { TaskStore } from "../store.js";
 import type { McpServerDefinition, PlanningQuestion, Task, WorkflowStepMode, WorkflowStepToolMode } from "../types.js";
@@ -291,6 +292,14 @@ export interface PluginContext {
   pluginId: string;
   /** Read-only access to task data */
   taskStore: TaskStore;
+  /**
+   * FNXC:PluginNativeSessionRead 2026-09-14-02:02:
+   * Read one exact CLI session from this project's live runtime after its writes
+   * are durable. Returns detached data or undefined for an unknown ID. Runtime
+   * unavailability/ownership/durability errors reject; method presence alone is
+   * not readiness. No session enumeration, writes or runtime construction.
+   */
+  readCliSession?: (sessionId: string) => Promise<CliSession | undefined>;
   /** Plugin's own settings */
   settings: Record<string, unknown>;
   /** Structured logger */

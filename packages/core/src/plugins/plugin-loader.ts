@@ -156,6 +156,8 @@ export interface PluginLoaderOptions {
   pluginStore: PluginStore;
   /** Task store for plugin context */
   taskStore: TaskStore;
+  /** Late project-scoped native reader; it must not create a runtime/cache. */
+  readCliSession?: PluginContext["readCliSession"];
   /** Additional directories to scan for plugins */
   pluginDirs?: string[];
   /** npm prefix for resolving packages */
@@ -273,6 +275,39 @@ export class PluginLoader extends EventEmitter<{
     return this.createRouteContext(plugin.manifest.id);
   }
 
+  /**
+   * FNXC:PluginNativeSessionRead 2026-09-14-02:02:
+   * Management may own onLoad before the execution loader joins its lifecycle.
+   * Resolve capability ownership on every call, not when that context is captured.
+   * Existing project/plugin lifecycle membership supplies revocation and isolation;
+   * no separate global runtime registry or session cache is introduced. A foreign
+   * TaskStore override does not transfer this native capability. Captured contexts
+   * cannot regain it after their plugin instance is unloaded or replaced.
+   */
+  private resolveCliSessionReader(pluginId: string, projectRoot: string, contextPlugin: FusionPlugin | undefined): NonNullable<PluginContext["readCliSession"]> {
+    if (!contextPlugin || this.plugins.get(pluginId) !== contextPlugin || resolve(this.getProjectRoot()) !== projectRoot) {
+      throw new Error(`Native CLI session reader unavailable for plugin ${pluginId}`);
+    }
+    const readers = new Set<NonNullable<PluginContext["readCliSession"]>>();
+    if (resolve(this.getProjectRoot()) === projectRoot && this.options.readCliSession) {
+      readers.add(this.options.readCliSession);
+    }
+    if (this.options.lifecycleScope !== "isolated") {
+      const prefix = `${projectRoot}\u0000${pluginId}\u0000`;
+      for (const [key, lifecycle] of PluginLoader.processPluginLifecycles) {
+        if (!key.startsWith(prefix) || !lifecycle.participants.has(this)) continue;
+        for (const participant of lifecycle.participants) {
+          if (participant.plugins.get(pluginId) === contextPlugin && participant.options.readCliSession) {
+            readers.add(participant.options.readCliSession);
+          }
+        }
+      }
+    }
+    if (readers.size === 0) throw new Error(`Native CLI session reader unavailable for plugin ${pluginId}`);
+    if (readers.size !== 1) throw new Error(`Native CLI session reader ownership is ambiguous for plugin ${pluginId}`);
+    return readers.values().next().value!;
+  }
+
   async createRouteContext(
     pluginId: string,
     overrides?: Partial<Pick<PluginContext, "taskStore" | "settings" | "resolveProjectTaskStore" | "emitEvent">>,
@@ -294,12 +329,15 @@ export class PluginLoader extends EventEmitter<{
     wraps override stores and project stores resolved via resolveProjectTaskStore so
     a plugin cannot escape the gate through a project-scoped handle.
     */
-    const permissions = this.getPlugin(pluginId)?.manifest.permissions;
+    const contextPlugin = this.getPlugin(pluginId);
+    const permissions = contextPlugin?.manifest.permissions;
     const rawTaskStore = overrides?.taskStore ?? this.options.taskStore;
     const rawResolveProjectTaskStore = overrides?.resolveProjectTaskStore;
+    const projectRoot = resolve(rawTaskStore.getRootDir?.() ?? process.cwd());
     return {
       pluginId,
       taskStore: createPluginGatedTaskStore(rawTaskStore, { pluginId, permissions }),
+      readCliSession: async (sessionId) => this.resolveCliSessionReader(pluginId, projectRoot, contextPlugin)(sessionId),
       settings: overrides?.settings ?? await this.getPluginSettings(pluginId),
       logger: this.createLogger(pluginId),
       createAiSession,

@@ -35,7 +35,12 @@ export interface HermesStreamSession {
   lastModelDescription: string;
   callbacks: HermesCallbacks;
   usage?: unknown;
-  /** Optional reported cumulative snapshot; never proves budget or model-family enforcement. */
+  /**
+   * Latest successfully captured cumulative snapshot for the current prompt attempt.
+   * Cleared when the next non-preaborted attempt starts, so a failed capture cannot expose stale acceptance.
+   * This is not durable history; session-cumulative describes the native counters, not retained snapshots.
+   * Never proves budget or model-family enforcement.
+   */
   nativeReceipt?: HermesSessionReceipt;
   runtimeContext?: HermesRuntimeContext;
   fusedSystemPrompt: string;

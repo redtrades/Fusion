@@ -37,7 +37,11 @@ export function parseHermesSessionReceipt(text: string, sessionId: string): Herm
   } catch { throw new Error("Hermes session receipt invalid or incomplete"); }
 }
 
-/** Read the already completed native session through the supported CLI; no inference or database owner. */
+/**
+ * Read the already completed native session through the supported CLI; no inference or database owner.
+ * An aborted supplied signal rejects with name "AbortError" and a fixed message, never signal.reason.
+ * Other failures reject with a generic sanitized Error; no child diagnostics are exposed.
+ */
 export async function readHermesSessionReceipt(
   settings: { binaryPath: string; profile?: string }, sessionId: string, signal?: AbortSignal,
 ): Promise<HermesSessionReceipt> {
@@ -55,5 +59,12 @@ export async function readHermesSessionReceipt(
     });
     signal?.throwIfAborted();
     return parseHermesSessionReceipt(stdout, sessionId);
-  } catch { throw new Error("Hermes session receipt unavailable"); }
+  } catch {
+    if (signal?.aborted) {
+      const error = new Error("Hermes session receipt aborted");
+      error.name = "AbortError";
+      throw error;
+    }
+    throw new Error("Hermes session receipt unavailable");
+  }
 }

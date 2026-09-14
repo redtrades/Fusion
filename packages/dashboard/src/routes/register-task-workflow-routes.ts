@@ -22,7 +22,7 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { existsSync } from "node:fs";
 import { readFile, rm, rmdir, stat, realpath } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative } from "node:path";
 import type {
   TaskStore,
   Task,
@@ -99,6 +99,7 @@ import {
   isBuiltinWorkflowId,
   resolveProjectColumnsForRoles,
   canonicalizeWorktreePath,
+  canonicalizeWorktreePathSync,
   acquireWorktreePathReservation,
   disposeTaskBeforeReset,
   buildTaskResetWorktreePlan,
@@ -3877,7 +3878,7 @@ export function registerTaskWorkflowRoutes(ctx: ApiRoutesContext, deps: TaskWork
         const reservations: Awaited<ReturnType<typeof acquireWorktreePathReservation>>[] = [];
         const targetSuffix = (repoRel: string) => repoRel === SINGULAR_RESET_WORKTREE_REPO_REL ? "" : ` (${repoRel})`;
         const branchTargetSuffix = (repoRootDir: string) => {
-          const target = resetPlan.targets.find((entry) => resolve(entry.repoRootDir) === resolve(repoRootDir));
+          const target = resetPlan.targets.find((entry) => canonicalizeWorktreePathSync(entry.repoRootDir) === canonicalizeWorktreePathSync(repoRootDir));
           return target ? targetSuffix(target.repoRel) : "";
         };
         const branchBlockMessage = (blocked: Awaited<ReturnType<typeof planTaskResetBranchCleanup>>["blocked"]) => {
@@ -3894,7 +3895,7 @@ export function registerTaskWorkflowRoutes(ctx: ApiRoutesContext, deps: TaskWork
           await scopedStore.logEntry(req.params.id, `Reset blocked by task branches: ${blocked.map((entry) => `${entry.branch} [${entry.reason}]${entry.holderWorktreePath ? ` at ${entry.holderWorktreePath}` : ""}`).join(", ")}`);
         };
         const isStrictDescendant = (root: string, candidate: string) => {
-          const pathRelative = relative(resolve(root), resolve(candidate));
+          const pathRelative = relative(canonicalizeWorktreePathSync(root), canonicalizeWorktreePathSync(candidate));
           return pathRelative !== "" && !pathRelative.startsWith("..") && !isAbsolute(pathRelative);
         };
         const targetPaths = (plan: ReturnType<typeof buildTaskResetWorktreePlan>) => plan.targets
@@ -3902,7 +3903,7 @@ export function registerTaskWorkflowRoutes(ctx: ApiRoutesContext, deps: TaskWork
           .sort();
         const registeredWorktreePathsByRepoRoot = new Map<string, Promise<Set<string>>>();
         const getRegisteredPathsForRepo = (repoRootDir: string) => {
-          const key = resolve(repoRootDir);
+          const key = canonicalizeWorktreePathSync(repoRootDir);
           let registered = registeredWorktreePathsByRepoRoot.get(key);
           if (!registered) {
             registered = getRegisteredWorktreePaths(repoRootDir);
@@ -4068,6 +4069,16 @@ export function registerTaskWorkflowRoutes(ctx: ApiRoutesContext, deps: TaskWork
             if (existsSync(target.canonicalPath)) {
               let removal;
               try {
+                // Session registrations may still use the recorded alias. Preserve those
+                // liveness fences before removing the physically canonical target.
+                const recordedPaths = [target.worktreePath, fencedTask.worktree,
+                  ...Object.values(fencedTask.workspaceWorktrees ?? {}).map((entry) => entry.worktreePath)];
+                for (const rawPath of new Set(recordedPaths)) {
+                  if (rawPath && rawPath !== target.canonicalPath
+                    && canonicalizeWorktreePathSync(rawPath) === target.canonicalPath) {
+                    await reconcileTaskResetSessionRoot({ sessionRootPath: rawPath, taskId: req.params.id });
+                  }
+                }
                 removal = await removeTaskResetWorktree({
                   worktreePath: target.canonicalPath,
                   rootDir: target.repoRootDir,

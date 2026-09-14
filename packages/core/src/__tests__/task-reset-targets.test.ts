@@ -1,3 +1,6 @@
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { canonicalizeWorktreePath, acquireWorktreePathReservation } from "../tasks/worktree-path-reservation.js";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Task } from "../types.js";
@@ -187,5 +190,51 @@ describe("buildTaskResetWorktreePlan", () => {
     expect(() => buildTaskResetWorktreePlan(task({ workspaceWorktrees: {
       "../escape": { worktreePath: "/escape/.worktrees/fn-203", branch: "fusion/fn-203" },
     } }), { rootDir, settings: {} })).toThrow(/escapes workspace root/);
+  });
+});
+
+
+describe("Reset physical path identity", () => {
+  it.each([false, true])("deduplicates aliases with an existing leaf: %s", async (existing) => {
+    const fixture = realpathSync(mkdtempSync(join(tmpdir(), "reset-alias-")));
+    try {
+      const physical = join(fixture, "physical");
+      const alias = join(fixture, "alias");
+      mkdirSync(physical);
+      symlinkSync(physical, alias, "dir");
+      const suffix = ".fusion/worktrees/fn-203";
+      const expected = join(physical, suffix);
+      if (existing) mkdirSync(expected, { recursive: true });
+      const plan = buildTaskResetWorktreePlan(task({ worktree: expected }), { rootDir: alias, settings: {} });
+      expect(plan.targets).toHaveLength(1);
+      expect(plan.targets[0]?.canonicalPath).toBe(expected);
+      expect(plan.canonicalSingularWorktreePath).toBe(expected);
+      expect(await canonicalizeWorktreePath(join(alias, suffix))).toBe(expected);
+      const reservation = await acquireWorktreePathReservation({ canonicalPath: join(alias, suffix), worktreesDir: join(alias, ".fusion/worktrees"), rootDir: alias });
+      try {
+        expect(reservation.canonicalPath).toBe(expected);
+        await expect(acquireWorktreePathReservation({ canonicalPath: expected, worktreesDir: join(physical, ".fusion/worktrees"), rootDir: physical, acquireTimeoutMs: 0 })).rejects.toThrow(/Timed out/);
+      } finally { await reservation.release(); }
+    } finally { rmSync(fixture, { recursive: true, force: true }); }
+  });
+
+  it("folds workspace and singular aliases into one physical child", () => {
+    const fixture = realpathSync(mkdtempSync(join(tmpdir(), "reset-workspace-alias-")));
+    try {
+      const physical = join(fixture, "physical");
+      const alias = join(fixture, "alias");
+      mkdirSync(physical);
+      symlinkSync(physical, alias, "dir");
+      const child = join(resolveWorkspaceTaskWorktreeDir(physical, {}, taskId), "api");
+      const aliasChild = join(resolveWorkspaceTaskWorktreeDir(alias, {}, taskId), "api");
+      const plan = buildTaskResetWorktreePlan(task({ worktree: aliasChild, workspaceWorktrees: {
+        api: { worktreePath: child, branch: "fusion/fn-203" },
+        duplicate: { worktreePath: aliasChild, branch: "fusion/fn-203" },
+      } }), { rootDir: alias, settings: {} });
+      expect(plan.targets).toHaveLength(1);
+      expect(plan.targets[0]?.canonicalPath).toBe(child);
+      expect(plan.targets[0]?.aliasRepoRels).toEqual(["duplicate", SINGULAR_RESET_WORKTREE_REPO_REL]);
+      expect(plan.ignoredSingularWorktree).toBeUndefined();
+    } finally { rmSync(fixture, { recursive: true, force: true }); }
   });
 });

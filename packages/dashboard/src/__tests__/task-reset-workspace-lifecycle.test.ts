@@ -1,8 +1,8 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import express from "express";
-import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { existsSync, realpathSync } from "node:fs";
+import { mkdir, mkdtemp as mkdtempRaw, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { Task, TaskStore } from "@fusion/core";
@@ -21,6 +21,8 @@ import {
 } from "@fusion/engine";
 import { createApiRoutes } from "../routes.js";
 import { request as performRequest } from "../test-request.js";
+
+const mkdtemp = async (prefix: string) => realpathSync(await mkdtempRaw(prefix));
 
 vi.mock("@fusion/engine", async () => {
   const actual = await vi.importActual<typeof import("@fusion/engine")>("@fusion/engine");

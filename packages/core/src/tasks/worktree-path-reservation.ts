@@ -1,6 +1,7 @@
 import {createHash, randomUUID} from "node:crypto";
 import {hostname} from "node:os";
-import {dirname, join, resolve} from "node:path";
+import { realpathSync } from "node:fs";
+import {basename, dirname, join, resolve} from "node:path";
 import {mkdir, readFile, rename, rm, rmdir, unlink, writeFile} from "node:fs/promises";
 
 /**
@@ -39,9 +40,29 @@ export interface WorktreePathReservationOptions {
   acquireTimeoutMs?: number;
 }
 
+/** Physical identity shared by Reset, registration and reservations, including absent leaves. */
+export function canonicalizeWorktreePathSync(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    let dir = resolve(path);
+    const suffix: string[] = [];
+    while (true) {
+      try {
+        return resolve(realpathSync(dir), ...suffix.reverse());
+      } catch {
+        const parent = dirname(dir);
+        if (parent === dir) break;
+        suffix.push(basename(dir));
+        dir = parent;
+      }
+    }
+    return resolve(path);
+  }
+}
+
 export async function canonicalizeWorktreePath(path: string): Promise<string> {
-  // resolve is intentional: absent orphan paths still need one stable lock key.
-  return resolve(path);
+  return canonicalizeWorktreePathSync(path);
 }
 
 function paths(worktreesDir: string, canonicalPath: string) {

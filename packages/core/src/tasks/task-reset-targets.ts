@@ -1,4 +1,5 @@
-import { join, resolve } from "node:path";
+import { canonicalizeWorktreePathSync } from "./worktree-path-reservation.js";
+import { join } from "node:path";
 import { isWorkspaceTask, type Settings, type Task } from "../types.js";
 import {
   assertWorkspaceRepoRelPath,
@@ -58,7 +59,7 @@ export function buildTaskResetWorktreePlan(
     const canonicalSingularWorktreePath = join(worktreesDir, task.id.toLowerCase());
     const targetsByCanonical = new Map<string, TaskResetWorktreeTarget>();
     const addTarget = (worktreePath: string) => {
-      const canonicalPath = resolve(worktreePath);
+      const canonicalPath = canonicalizeWorktreePathSync(worktreePath);
       if (targetsByCanonical.has(canonicalPath)) return;
       targetsByCanonical.set(canonicalPath, {
         repoRel: SINGULAR_RESET_WORKTREE_REPO_REL,
@@ -79,7 +80,7 @@ export function buildTaskResetWorktreePlan(
       layout: "singular",
       targets: [...targetsByCanonical.values()],
       branchCleanupTargets: [{ repoRootDir: rootDir, recordedBranches: recordedBranch ? [recordedBranch] : [] }],
-      canonicalSingularWorktreePath: resolve(canonicalSingularWorktreePath),
+      canonicalSingularWorktreePath: canonicalizeWorktreePathSync(canonicalSingularWorktreePath),
     };
   }
 
@@ -93,7 +94,7 @@ export function buildTaskResetWorktreePlan(
       workspaceRootDir: rootDir,
       repoRelPath: repoRel,
     });
-    const canonicalPath = resolve(entry.worktreePath);
+    const canonicalPath = canonicalizeWorktreePathSync(entry.worktreePath);
     const existing = targetsByCanonical.get(canonicalPath);
     if (existing) {
       existing.aliasRepoRels.push(repoRel);
@@ -113,7 +114,7 @@ export function buildTaskResetWorktreePlan(
 
   let ignoredSingularWorktree: string | undefined;
   if (task.worktree) {
-    const existing = targetsByCanonical.get(resolve(task.worktree));
+    const existing = targetsByCanonical.get(canonicalizeWorktreePathSync(task.worktree));
     if (existing) existing.aliasRepoRels.push(SINGULAR_RESET_WORKTREE_REPO_REL);
     else ignoredSingularWorktree = task.worktree;
   }

@@ -1,4 +1,4 @@
-import {mkdtemp, rm} from "node:fs/promises";
+import {mkdtemp, realpath, rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {afterEach, describe, expect, it, vi} from "vitest";
@@ -6,7 +6,7 @@ import {acquireWorktreePathReservation, readWorktreePathReservation} from "../ta
 
 const dirs: string[] = [];
 async function fixture() {
-  const dir = await mkdtemp(join(tmpdir(), "fusion-reservation-"));
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "fusion-reservation-")));
   dirs.push(dir);
   return {rootDir: dir, worktreesDir: join(dir, "trees"), canonicalPath: join(dir, "trees", "pinned")};
 }

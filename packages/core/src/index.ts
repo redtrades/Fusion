@@ -864,6 +864,7 @@ export {
   withWorktreePathReservation,
   readWorktreePathReservation,
   canonicalizeWorktreePath,
+  canonicalizeWorktreePathSync,
   type WorktreePathReservation,
   type WorktreePathReservationOptions,
 } from "./tasks/worktree-path-reservation.js";

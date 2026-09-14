@@ -1,8 +1,8 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import express from "express";
-import { existsSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { existsSync, realpathSync } from "node:fs";
+import { chmod, mkdir, mkdtemp as mkdtempRaw, readFile, stat, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { Task, TaskStore } from "@fusion/core";
@@ -17,6 +17,8 @@ import {
 } from "@fusion/engine";
 import { createApiRoutes } from "../routes.js";
 import { request as performRequest } from "../test-request.js";
+
+const mkdtemp = async (prefix: string) => realpathSync(await mkdtempRaw(prefix));
 
 vi.mock("@fusion/engine", async () => {
   const actual = await vi.importActual<typeof import("@fusion/engine")>("@fusion/engine");
@@ -581,6 +583,51 @@ describe("POST /tasks/:id/reset", () => {
       expect((await stat(worktree)).isDirectory()).toBe(true);
     } finally {
       unregister();
+    }
+  });
+});
+
+
+describe("Reset alias ownership admission", () => {
+  it.each(["branch", "canonical-id", "unregistered", "foreign-owner", "live-alias", "escape"])("preserves %s ownership through a symlinked project root", async (mode) => {
+    const fixture = realpathSync(await mkdtemp(join(tmpdir(), "reset-route-alias-")));
+    const physical = join(fixture, "physical");
+    const alias = join(fixture, "alias");
+    await mkdir(physical);
+    await symlink(physical, alias, "dir");
+    const worktree = join(alias, ".worktrees/fn-400");
+    const physicalWorktree = join(physical, ".worktrees/fn-400");
+    await mkdir(physicalWorktree, { recursive: true });
+    await mkdir(join(alias, ".fusion/tasks/FN-400"), { recursive: true });
+    const task = taskFixture(worktree);
+    if (mode === "canonical-id") task.branch = undefined;
+    if (mode === "escape") {
+      const outside = join(fixture, "outside");
+      await mkdir(outside);
+      await symlink(outside, join(physical, ".worktrees/escape"), "dir");
+      task.worktree = join(alias, ".worktrees/escape");
+    }
+    vi.mocked(getRegisteredWorktreeBranches).mockResolvedValue(mode === "branch" || mode === "foreign-owner" || mode === "live-alias"
+      ? [{ branch: "fusion/fn-400", worktreePath: physicalWorktree }] : []);
+    vi.mocked(getRegisteredWorktreePaths).mockResolvedValue(new Set(mode === "unregistered" ? [] : [physicalWorktree]));
+    const publication = vi.fn().mockResolvedValue({ ...task, column: "triage" });
+    const store = createStore(alias, task, [], publication);
+    if (mode === "foreign-owner") vi.mocked(store.listTasks).mockResolvedValue([task, { ...task, id: "FN-OTHER", worktree: physicalWorktree }]);
+    if (mode === "live-alias") activeSessionRegistry.registerPath(worktree, { taskId: "FN-OTHER", kind: "planning", ownerKey: "planning:FN-OTHER" });
+    let response;
+    try {
+      response = await performRequest(createApp(store), "POST", "/api/tasks/FN-400/reset", JSON.stringify({ confirm: true }), { "content-type": "application/json" });
+    } finally {
+      if (mode === "live-alias") activeSessionRegistry.unregisterPath(worktree);
+    }
+    if (mode === "branch" || mode === "canonical-id") {
+      expect(response.status).toBe(200);
+      expect(existsSync(physicalWorktree)).toBe(false);
+      expect(publication).toHaveBeenCalledOnce();
+    } else {
+      expect(response.status).toBe(mode === "escape" ? 400 : 409);
+      expect(existsSync(physicalWorktree)).toBe(true);
+      expect(publication).not.toHaveBeenCalled();
     }
   });
 });

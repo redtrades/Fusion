@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import type {
   Settings,
   TaskDetail,
@@ -51,6 +52,29 @@ import { workflowNodeRequiresWorktree } from "./workflow-node-execution-needs.js
 import type { WorkflowColumnBoundary } from "./workflow-column-boundary.js";
 import { BranchWriteProvenanceError } from "@fusion/core";
 import { WorktreeBaseRefreshError, WorkspacePreparationError } from "../worktree/worktree-acquisition.js";
+
+// FNXC:PluginNativeDelegation 2026-09-14-01:04:
+// Graph context can contain native function capabilities. Snapshot plain data
+// recursively while retaining those function identities; structuredClone alone
+// rejects them. Non-plain data uses the native clone or refuses delegation.
+function snapshotDelegationInput(value: unknown, seen = new WeakMap<object, unknown>()): unknown {
+  if (value === null || typeof value !== "object") return value;
+  if (seen.has(value)) return seen.get(value);
+  if (Array.isArray(value)) {
+    const copy: unknown[] = [];
+    seen.set(value, copy);
+    for (const item of value) copy.push(snapshotDelegationInput(item, seen));
+    return copy;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return structuredClone(value);
+  const copy = Object.create(prototype) as Record<PropertyKey, unknown>;
+  seen.set(value, copy);
+  for (const key of Reflect.ownKeys(value)) {
+    copy[key] = snapshotDelegationInput((value as Record<PropertyKey, unknown>)[key], seen);
+  }
+  return copy;
+}
 
 export type WorkflowNodeOutcome = "success" | "failure";
 
@@ -1994,16 +2018,53 @@ export class WorkflowGraphExecutor {
     workflow: WorkflowIr,
     context: Record<string, unknown>,
     signal?: AbortSignal,
+    nativeHandler?: () => Promise<WorkflowNodeResult>,
   ): Promise<WorkflowNodeResult | undefined> {
     const extensionIds = Object.keys(node.extensions ?? {});
     if (extensionIds.length === 0) return undefined;
 
+    let admittedInput: unknown;
+    let snapshotAvailable = false;
+    try {
+      admittedInput = snapshotDelegationInput([node, task, context]);
+      snapshotAvailable = true;
+    } catch {
+      // Existing non-delegating extensions retain their behavior.
+    }
     const registry = getWorkflowExtensionRegistry();
     for (const extensionId of extensionIds) {
       const definition = registry.get(extensionId);
       const extension = definition?.extension;
       if (!definition || definition.degraded || extension?.kind !== "node-handler" || !extension.handle) continue;
       if (extension.nodeKind && extension.nodeKind !== node.kind) continue;
+      // FNXC:PluginNativeDelegation 2026-09-14-01:04:
+      // Delegate the admitted node without recursion. Once native work starts,
+      // plugin failure must not fall through and dispatch the same work again.
+      let defaultResult: Promise<WorkflowNodeResult> | undefined;
+      let nativeFailed = false;
+      let nativeFailure: unknown;
+      let active = true;
+      const runDefault = (): Promise<WorkflowNodeResult> => {
+        if (defaultResult) return defaultResult;
+        defaultResult = Promise.resolve().then(async () => {
+          if (!active || signal?.aborted) throw new Error("Native node delegation is no longer active");
+          if (!snapshotAvailable || !isDeepStrictEqual([node, task, context], admittedInput)) {
+            throw new Error("Native node delegation inputs changed after admission");
+          }
+          if (!nativeHandler) throw new WorkflowIrError(`No handler registered for node kind: ${node.kind}`);
+          try {
+            return await nativeHandler();
+          } catch (error) {
+            nativeFailed = true;
+            nativeFailure = error;
+            throw error;
+          }
+        });
+        // A plugin may forget to await its call. Keep rejection observed and
+        // settle native work before returning/releasing graph admission below.
+        void defaultResult.catch(() => {});
+        return defaultResult;
+      };
       try {
         const result = await extension.handle({
           task,
@@ -2011,10 +2072,20 @@ export class WorkflowGraphExecutor {
           node,
           context,
           signal,
+          runDefault,
         });
+        if (defaultResult) {
+          await defaultResult.catch((error: unknown) => {
+            if (result.outcome !== "failure") throw error;
+          });
+        }
         return this.normalizePluginNodeResult(result);
       } catch (error) {
-        if (extension.fallback === "degradeToDefault") {
+        if (defaultResult) await defaultResult.catch(() => {});
+        // Preserve native suspension/preparation/retry classification when the
+        // plugin lets that exact failure escape. Plugin faults remain closed.
+        if (nativeFailed && error === nativeFailure) throw error;
+        if (extension.fallback === "degradeToDefault" && !defaultResult) {
           try {
             registry.degrade(
               [definition.id],
@@ -2035,6 +2106,8 @@ export class WorkflowGraphExecutor {
             [`node:${node.id}:extensionId`]: extensionId,
           },
         };
+      } finally {
+        active = false;
       }
     }
 
@@ -2126,7 +2199,8 @@ export class WorkflowGraphExecutor {
         progressRecord = recordProgress && this.shouldRecordNodeProgress(node)
           ? await this.recordNodeProgressStart(task.id, node)
           : null;
-        const pluginResult = await this.executePluginNodeHandler(node, task, workflow, context, signal);
+        const pluginResult = await this.executePluginNodeHandler(node, task, workflow, context, signal,
+          handler ? () => handler(node, { task, settings, context, signal }) : undefined);
         if (pluginResult) {
           const projected = await this.publishTaskProjectionFromResult(task.id, node, pluginResult);
           if (signal?.aborted) {

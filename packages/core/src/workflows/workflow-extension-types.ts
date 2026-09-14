@@ -97,6 +97,14 @@ export interface WorkflowNodeHandlerInput {
   node: WorkflowIrNode;
   context: Record<string, unknown>;
   signal?: AbortSignal;
+  /**
+   * FNXC:PluginNativeDelegation 2026-09-14-01:04:
+   * Invoke only this already-admitted node's native handler. No task/node/config
+   * overrides; concurrent/repeated calls share one promise, including rejection.
+   * Available only during this handler invocation; cancellation or mutation of
+   * the supplied node/task/context refuses dispatch. Return contextPatch instead.
+   */
+  runDefault?: () => Promise<WorkflowNodeExtensionResult>;
 }
 
 export type WorkflowNodeExtensionHandler =

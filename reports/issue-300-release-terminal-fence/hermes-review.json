@@ -1,0 +1,16 @@
+{
+  "verdict": "PASS",
+  "summary": "Both source and handoff are internally consistent. Implementation and tests match the changed behavior for held-terminal release, anchor binding, old-A4 refusal, and capacity semantics. No contradictions found.",
+  "findings": [
+    "releaseWorkflowOverlayTerminalFencedImpl adds a strict checkpoint/anchor binding check before publishing.",
+    "The release transaction deletes only checkpoint.writeFence.terminal, matching the handoff claim.",
+    "Tests cover 254/255/256 transitions, old-A4 refusal with transition-superseded, ownership refusal, and three mismatched anchor bindings.",
+    "Rollback test now asserts full sourceMetadata equality, consistent with the code change preserving metadata on failure."
+  ],
+  "evidence": [
+    "Diff in workflow-overlay-release.ts adds the terminal-superseded guard and delete checkpoint.writeFence.terminal.",
+    "Diff in workflow-overlay-release.pg.test.ts adds phased release tests and mismatch variants covering operation, graph, and receipt-index.",
+    "HANDOFF.md states fence retirement is scoped to checkpoint.writeFence.terminal and that 254-to-255 and 255-to-256 were already allowed, which matches the test behavior."
+  ],
+  "assessment": "Convergent. The production change and the test changes align. The handoff claims match the visible diff and the surrounding implementation. There is no evidence in these sources that the release or capacity behavior is incorrect or under-specified."
+}

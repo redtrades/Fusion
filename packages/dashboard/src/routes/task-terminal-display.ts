@@ -16,8 +16,9 @@ export async function enrichTaskTerminalDisplays<T extends Task>(store: Pick<Tas
         const { terminalBlock: block, terminal } = result;
         const kind = block.reason === "missing-input" || block.reason === "dependency-down" ? "blocked"
           : block.reason === "gate-failed-final" || block.reason === "validation-inconclusive" || block.reason === "merge-manual-required" ? "escalated"
-          : block.reason === "operator-hold" && (block.operatorColumn === "blocked" || block.operatorColumn === "escalated") ? block.operatorColumn : undefined;
-        if (!kind || block.resumeActor !== (kind === "blocked" ? "orchestrator" : "human")) continue;
+          : block.reason === "operator-hold" && (block.disposition === "blocked" || block.disposition === "escalated") ? block.disposition : undefined;
+        // FNXC:TerminalBoard 2026-09-14-04:39: The writer persists semantic disposition, not its operatorColumn input. Known reasons must agree with any persisted disposition.
+        if (!kind || (block.disposition !== undefined && block.disposition !== kind) || block.resumeActor !== (kind === "blocked" ? "orchestrator" : "human")) continue;
         rows[index] = { ...row, terminalDisplay: { kind, reason: block.reason as string,
           resumeActor: block.resumeActor as "orchestrator" | "human", originColumn: row.column,
           anchorId: terminal.heldWorkItemId, runId: terminal.graphRunId, taskRevision: row.updatedAt } };

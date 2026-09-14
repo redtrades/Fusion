@@ -1,3 +1,5 @@
+import type { HermesSessionReceipt } from "./session-receipt.js";
+
 /**
  * Hermes Runtime Plugin - Type Definitions
  *
@@ -33,6 +35,8 @@ export interface HermesStreamSession {
   lastModelDescription: string;
   callbacks: HermesCallbacks;
   usage?: unknown;
+  /** Optional reported cumulative snapshot; never proves budget or model-family enforcement. */
+  nativeReceipt?: HermesSessionReceipt;
   runtimeContext?: HermesRuntimeContext;
   fusedSystemPrompt: string;
   dispose(): void;

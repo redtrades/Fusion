@@ -143,3 +143,6 @@ export type { HermesLaunchSpec } from "./windows-binary-launch.js";
 // Probe re-export for the dashboard's runtime-provider-probes façade.
 export { probeHermesBinary } from "./probe.js";
 export type { HermesBinaryStatus } from "./probe.js";
+
+export { readHermesSessionReceipt, parseHermesSessionReceipt } from "./session-receipt.js";
+export type { HermesSessionReceipt } from "./session-receipt.js";

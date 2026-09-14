@@ -607,3 +607,10 @@ describe("listHermesProfiles", () => {
     expect(args).toEqual(["profile", "list"]);
   });
 });
+
+
+it("does not spawn an already cancelled Hermes invocation", async () => {
+  const controller = new AbortController(); controller.abort();
+  await expect(invokeHermesCli("do not run", defaultSettings(), undefined, controller.signal)).rejects.toThrow("aborted");
+  expect(mockSuperviseSpawn.mock.calls.length).toBe(0);
+});

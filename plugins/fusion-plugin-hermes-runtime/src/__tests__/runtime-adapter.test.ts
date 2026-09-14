@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { HermesRuntimeAdapter } from "../runtime-adapter.js";
 
-const { mockInvoke } = vi.hoisted(() => ({
+const { mockInvoke, mockReceipt } = vi.hoisted(() => ({
+  mockReceipt: vi.fn(),
   mockInvoke: vi.fn(),
 }));
 
@@ -14,6 +15,8 @@ vi.mock("../cli-spawn.js", async () => {
     invokeHermesCli: mockInvoke,
   };
 });
+
+vi.mock("../session-receipt.js", () => ({ readHermesSessionReceipt: mockReceipt }));
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -177,5 +180,60 @@ describe("HermesRuntimeAdapter — dispose", () => {
       systemPrompt: "sys",
     });
     await expect(adapter.dispose!(session)).resolves.toBeUndefined();
+  });
+});
+
+
+describe("Hermes cancellation handoff", () => {
+  it("passes the current prompt signal and does not accept cancelled output", async () => {
+    const controller = new AbortController();
+    mockInvoke.mockImplementationOnce((_prompt, _settings, _resume, signal) => new Promise((_resolve, reject) => {
+      if (!signal) { reject(new Error("missing cancellation signal")); return; }
+      signal.addEventListener("abort", () => reject(new Error("hermes: invocation aborted")), { once: true });
+    }));
+    const adapter = new HermesRuntimeAdapter({});
+    const onText = vi.fn();
+    const { session } = await adapter.createSession({ cwd: "/repo", systemPrompt: "sys", onText });
+    const pending = adapter.promptWithFallback(session, "bounded task", { signal: controller.signal });
+    controller.abort();
+    await expect(pending).rejects.toThrow("invocation aborted");
+    expect(onText).not.toHaveBeenCalled();
+    expect(session.messages).toEqual([]);
+  });
+});
+
+
+describe("Hermes opt-in receipt delivery", () => {
+  it("does not request a receipt for existing default sessions", async () => {
+    const { session } = await new HermesRuntimeAdapter({}).createSession({ cwd: "/repo", systemPrompt: "sys" });
+    await new HermesRuntimeAdapter({}).promptWithFallback(session, "task");
+    expect(mockReceipt).not.toHaveBeenCalled();
+    expect(session.nativeReceipt).toBeUndefined();
+  });
+  it("awaits exact receipt before assistant delivery and passes cancellation", async () => {
+    const adapter = new HermesRuntimeAdapter({ captureSessionReceipt: true, profile: "pilot" });
+    const onText = vi.fn();
+    const { session } = await adapter.createSession({ cwd: "/repo", systemPrompt: "sys", onText });
+    const receipt = { sessionId: "20260427_120000_abc123", scope: "session-cumulative" };
+    let finish!: (value: unknown) => void;
+    mockReceipt.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const controller = new AbortController();
+    const pending = adapter.promptWithFallback(session, "task", { signal: controller.signal });
+    await Promise.resolve();
+    expect(onText).not.toHaveBeenCalled();
+    expect(mockReceipt).toHaveBeenCalledWith(expect.objectContaining({ profile: "pilot" }), receipt.sessionId, controller.signal);
+    finish(receipt); await pending;
+    expect(session.nativeReceipt).toBe(receipt);
+    expect(onText).toHaveBeenCalledOnce();
+  });
+  it("retains native continuity but rejects output when export fails and clears old receipts", async () => {
+    const adapter = new HermesRuntimeAdapter({ captureSessionReceipt: true });
+    const onText = vi.fn();
+    const { session } = await adapter.createSession({ cwd: "/repo", systemPrompt: "sys", onText });
+    mockReceipt.mockRejectedValueOnce(new Error("Hermes session receipt unavailable"));
+    await expect(adapter.promptWithFallback(session, "task")).rejects.toThrow("receipt unavailable");
+    expect(session.sessionId).toBe("20260427_120000_abc123");
+    expect(session.nativeReceipt).toBeUndefined();
+    expect(onText).not.toHaveBeenCalled();
   });
 });

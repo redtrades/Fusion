@@ -1,7 +1,7 @@
 import { writeFile, appendFile, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { __setResetPublicationFailureForTesting } from "../../task-store/reset-lifecycle.js";
-import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { pgDescribe, createSharedPgTaskStoreTestHarness } from "../../__test-utils__/pg-test-harness.js";
 import { CliSessionStore } from "../../cli/cli-session-store.js";
 import { TaskStore } from "../../store.js";
@@ -136,6 +136,92 @@ pgDescribe("native CLI durable token accounting", () => {
     expect((await h.store().recordCliTokenUsageFenced(f.task.id, reaffirm)).hardExceeded).toBe(true);
     await h.store().resetTaskPublication(f.task.id, "todo");
     await expect(h.store().recordCliTokenUsageFenced(f.task.id, reaffirm)).rejects.toThrow("ownership");
+  });
+
+  async function hermesFixture() {
+    const f = await fixture("hermes");
+    const request = (inputTokens: number, phase = "observing", baseline = false): any => ({
+      kind: "hermes-session-cumulative", sessionId: f.request(0).sessionId,
+      nativeSessionId: "conversation", projectId: "project-cli-tokens", admission,
+      baseline, usage: { inputTokens, outputTokens: 2, cachedTokens: 1000, cacheWriteTokens: 1 },
+      cursor: { kind: "hermes-session-cumulative", nativeSessionId: "conversation", phase }, limits: { hard: 100 },
+    });
+    return { ...f, request };
+  }
+  it("Hermes cumulative replay survives a fresh store and initial resumed baseline excludes historical totals once", async () => {
+    const f = await hermesFixture();
+    expect((await h.store().recordCliTokenUsageFenced(f.task.id, f.request(10, "baseline", true))).observedWorkTokens).toBe(0);
+    expect((await h.store().recordCliTokenUsageFenced(f.task.id, f.request(15))).observedWorkTokens).toBe(5);
+    const other = new TaskStore(h.rootDir(), undefined, { asyncLayer: h.layer() });
+    expect((await other.recordCliTokenUsageFenced(f.task.id, f.request(15))).observedWorkTokens).toBe(5);
+    expect((await other.recordCliTokenUsageFenced(f.task.id, f.request(18, "baseline", true))).observedWorkTokens).toBe(8);
+    const state: any = (await h.store().getTask(f.task.id)).sourceMetadata?.cliTokenUsage;
+    expect(state.sessions["hermes:conversation"]).toEqual({ "session-cumulative": f.request(18).usage });
+    expect(state.cursors["hermes:conversation"]).toEqual(f.request(18, "baseline", true).cursor);
+  });
+  it("Hermes failure credits partial actual increases once and never resumes or drains", async () => {
+    const f = await hermesFixture();
+    await h.store().recordCliTokenUsageFenced(f.task.id, f.request(4));
+    expect((await h.store().recordCliTokenUsageFenced(f.task.id, f.request(7, "failed"))).observedWorkTokens).toBe(10);
+    expect((await h.store().recordCliTokenUsageFenced(f.task.id, f.request(7, "failed"))).observedWorkTokens).toBe(10);
+    for (const phase of ["observing", "drained", "baseline"]) await expect(h.store().recordCliTokenUsageFenced(f.task.id, f.request(9, phase))).rejects.toThrow(/failed/i);
+    expect((await h.store().getTask(f.task.id)).tokenUsage?.inputTokens).toBe(7);
+  });
+  it("Hermes refuses counter rollback, invented transcript or keys, and missing finite positive hard cap without writes", async () => {
+    const f = await hermesFixture();
+    await h.store().recordCliTokenUsageFenced(f.task.id, f.request(4));
+    for (const request of [f.request(3), { ...f.request(5), usage: { ...f.request(5).usage, cachedTokens: 999 } },
+      ...[undefined, 0, -1, Infinity].map(hard => ({ ...f.request(5), limits: { hard } })),
+      { ...f.request(5), observations: [{ key: "other", usage: f.request(5).usage }] },
+      { ...f.request(5), cursor: { ...f.request(5).cursor, bytes: 0, fileIdentity: "fake" } },
+    ]) await expect(h.store().recordCliTokenUsageFenced(f.task.id, request)).rejects.toThrow();
+    expect((await h.store().getTask(f.task.id)).tokenUsage?.inputTokens).toBe(4);
+  });
+  it("Hermes requires actual row identity and current native owner before replay and after Reset", async () => {
+    const f = await hermesFixture();
+    await h.store().recordCliTokenUsageFenced(f.task.id, f.request(1));
+    for (const request of [{ ...f.request(1), nativeSessionId: "invented" }, { ...f.request(1), projectId: "wrong" },
+      { ...f.request(1), cursor: { ...f.request(1).cursor, nativeSessionId: "other" } },
+      { ...f.request(1), admission: { ...admission, leaseEpoch: 2 } },
+    ]) await expect(h.store().recordCliTokenUsageFenced(f.task.id, request)).rejects.toThrow();
+    await h.store().resetTaskPublication(f.task.id, "todo");
+    await expect(h.store().recordCliTokenUsageFenced(f.task.id, f.request(1))).rejects.toThrow(/ownership/);
+  });
+  it("Hermes independent stores atomically sum concurrent native sessions and pause at the hard limit", async () => {
+    const f = await hermesFixture();
+    const second = f.sessions.createSession({ projectId: "project-cli-tokens", taskId: f.task.id, adapterId: "hermes", nativeSessionId: "second", purpose: "execute" }); await f.sessions.flush();
+    const other = new TaskStore(h.rootDir(), undefined, { asyncLayer: h.layer() });
+    const a = { ...f.request(7), limits: { hard: 20 } };
+    const b = { ...a, sessionId: second.id, nativeSessionId: "second", cursor: { ...a.cursor, nativeSessionId: "second" } };
+    const results = await Promise.all([h.store().recordCliTokenUsageFenced(f.task.id, a), other.recordCliTokenUsageFenced(f.task.id, b)]);
+    expect(results.map(r => r.observedWorkTokens).sort((a,b) => a-b)).toEqual([10,20]);
+    expect(results.filter(r => r.hardExceeded)).toHaveLength(1);
+    expect((await h.store().getTask(f.task.id)).paused).toBe(true);
+  });
+
+  it("Hermes credits first failed observation rather than accepting a failure as historical baseline", async () => {
+    const f = await hermesFixture();
+    await expect(h.store().recordCliTokenUsageFenced(f.task.id, f.request(5, "failed", true))).rejects.toThrow(/baseline/i);
+    expect((await h.store().recordCliTokenUsageFenced(f.task.id, f.request(5, "failed"))).observedWorkTokens).toBe(8);
+  });
+  it("Hermes overflow rolls back ledger and aggregate; postcommit projection retry is idempotent", async () => {
+    const f = await hermesFixture();
+    await h.store().recordCliTokenUsageFenced(f.task.id, f.request(1));
+    const before = await h.store().getTask(f.task.id);
+    await expect(h.store().recordCliTokenUsageFenced(f.task.id, { ...f.request(Number.MAX_SAFE_INTEGER), limits: { hard: Number.MAX_SAFE_INTEGER } })).rejects.toThrow(/overflow/);
+    const unchanged = await h.store().getTask(f.task.id);
+    expect(unchanged.sourceMetadata).toEqual(before.sourceMetadata);
+    expect(unchanged.tokenUsage).toEqual(before.tokenUsage);
+    const projection = vi.spyOn(h.store(), "writeTaskJsonFile").mockRejectedValueOnce(new Error("projection refused"));
+    try { await expect(h.store().recordCliTokenUsageFenced(f.task.id, f.request(6))).rejects.toThrow("projection refused"); }
+    finally { projection.mockRestore(); }
+    const other = new TaskStore(h.rootDir(), undefined, { asyncLayer: h.layer() });
+    expect((await other.recordCliTokenUsageFenced(f.task.id, f.request(6))).observedWorkTokens).toBe(9);
+  });
+  it("Hermes does not accept another adapter's row or an invented session row", async () => {
+    const f = await hermesFixture();
+    const other = f.sessions.createSession({ projectId: "project-cli-tokens", taskId: f.task.id, adapterId: "codex", nativeSessionId: "conversation", purpose: "execute" }); await f.sessions.flush();
+    for (const sessionId of ["not-registered", other.id]) await expect(h.store().recordCliTokenUsageFenced(f.task.id, { ...f.request(1), sessionId })).rejects.toThrow(/identity/);
   });
 
 });

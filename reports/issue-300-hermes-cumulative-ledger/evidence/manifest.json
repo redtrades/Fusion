@@ -1,0 +1,50 @@
+[
+  {
+    "file": "red.log.gz",
+    "rawBytes": 4010,
+    "rawSha256": "9ff4492cdce57133c98edf1ffab1e752febcac9f7c7c411b1bbf599f8e858f8c",
+    "gzipSha256": "534757f4e93337deb139c3107e3490c1b78f277226b9216f94243b848f88fc12"
+  },
+  {
+    "file": "baseline-red.log.gz",
+    "rawBytes": 9400,
+    "rawSha256": "af88b75978d9a6f8f489a46de5810c45253bc3423b86ce99b0fba0741ef7ee6d",
+    "gzipSha256": "6e13a979efb94836a2a77345ec5c4d40867fbc1658301642879ac171970b2579"
+  },
+  {
+    "file": "final-pg.log.gz",
+    "rawBytes": 1112,
+    "rawSha256": "7feb2343b541a88054f24a71940b3ef270fd762db8d299f973e5e350405ced37",
+    "gzipSha256": "8c0f497c4d4016124e08af5253a03e4fea82ee9248af9419e43f3320fdf1ec8d"
+  },
+  {
+    "file": "final-unit.log.gz",
+    "rawBytes": 253,
+    "rawSha256": "69287a92004213b47df0058470afbede9c7b551e5924b872837ec1207cb81d90",
+    "gzipSha256": "a9f80d7242eb843097c3cdf5d6348b58b1535a58294b7d2109f8e17a8e843a72"
+  },
+  {
+    "file": "final-build.log.gz",
+    "rawBytes": 115,
+    "rawSha256": "eeddffeb5dd28207d5e3cbbd9af1163f63077dbbeac364a8d9b51e07b7f0693f",
+    "gzipSha256": "a7efb07328cf85c36b5c9d81998bd4891bce799b67ef8323c1213c1164cf0627"
+  },
+  {
+    "file": "engine-typecheck.log.gz",
+    "rawBytes": 132,
+    "rawSha256": "54d5436a617488a0dd9f569f8ea788520f7d4c67782607f8c9457bf734da039a",
+    "gzipSha256": "687a8055c3012925c812a336f8ed0cb268d6dd8ad1c72b1dc2d509253a6e81ad"
+  },
+  {
+    "file": "lint.log.gz",
+    "rawBytes": 0,
+    "rawSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+  },
+  {
+    "file": "changeset.log.gz",
+    "rawBytes": 0,
+    "rawSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+  }
+]

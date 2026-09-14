@@ -58,8 +58,9 @@ const ACTIVE_TASK_CONTINUATION_STATES: WorkflowWorkItemState[] = [...ACTIVE_WORK
 /**
  * FNXC:WorkflowSerialization 2026-07-26-12:00:
  * FN-8592 serializes a task's workflow continuation decisions on the logical
- * `(project_id, task_id)` key. This MUST be the first lock in a transaction;
- * callers never hold two task locks. A repair-only lock was rejected because it
+ * `(project_id, task_id)` key. Standalone continuation writers take this lock first;
+ * writers also fencing Reset acquire the task advisory lock before this workflow lock.
+ * Callers never hold two task locks. A repair-only lock was rejected because it
  * cannot serialize competing writers, while a partial unique index, in-process
  * mutex, and SERIALIZABLE isolation respectively change valid multi-item
  * behavior, fail across processes, or require retries. PostgreSQL releases the
@@ -297,11 +298,13 @@ export async function upsertWorkflowWorkItem(
 }
 
 /** Atomically retire the current task continuation and persist its successor. */
+/** FNXC:WorkflowOverlayRelease 2026-09-14-04:02: Existing transactions let terminal suspension/release publish a continuation atomically with task state; standalone callers retain their transaction boundary. */
 export async function replaceActiveTaskWorkflowContinuation(
   layer: AsyncDataLayer,
   input: WorkflowWorkItemUpsertInput & { kind: "task" },
+  existingTx?: DbTransaction,
 ): Promise<WorkflowWorkItem> {
-  return layer.transactionImmediate(async (tx) => withTaskWorkflowSerialization(tx, layer.projectId, input.taskId, async () => {
+  const apply = async (tx: DbTransaction) => withTaskWorkflowSerialization(tx, layer.projectId, input.taskId, async () => {
     const activeRows = await tx.select().from(schema.project.workflowWorkItems).where(and(
       eq(schema.project.workflowWorkItems.taskId, input.taskId),
       eq(schema.project.workflowWorkItems.kind, "task"),
@@ -349,7 +352,8 @@ export async function replaceActiveTaskWorkflowContinuation(
       ));
     }
     return upsertWorkflowWorkItem(layer, input, tx);
-  }));
+  });
+  return existingTx ? apply(existingTx) : layer.transactionImmediate(apply);
 }
 
 /**

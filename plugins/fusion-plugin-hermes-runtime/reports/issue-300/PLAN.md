@@ -14,3 +14,9 @@ Owned seams/files: src/runtime-adapter.ts, src/cli-spawn.ts, src/types.ts, new s
 Upstream inspected locally at 98a3324821c64b78c13d5d0f105508da0ab71cee: https://github.com/NousResearch/hermes-agent ; https://hermes-agent.nousresearch.com ; https://github.com/NousResearch/hermes-agent/releases ; binary `hermes`; upstream-pending-verification. Source: hermes_cli/subcommands/sessions.py export flags, hermes_state_portability.py:240 exact session export.
 
 Rejected: `-z --usage-file` changes current chat semantics and auto-enables YOLO upstream; no paid fallback or approval changes permitted. Export snapshot is cumulative and session-row scoped, not per-call deltas or multi-model/compression lineage proof. No observed hard budget enforcement is delivered here.
+
+## Bounded receipt API clarity follow-up
+
+Parent authorized plugin-only changes after the preserved Solar FIX/reconsideration of bc6fb63. Clarify that nativeReceipt is the latest successful cumulative snapshot for the current attempt, cleared when the next non-preaborted attempt starts, not durable history. Distinguish supplied-signal cancellation at readHermesSessionReceipt with a sanitized Error named AbortError; keep all other export errors generic. Do not propagate signal.reason, subprocess diagnostics, or change chat/fallback settings.
+
+Test this existing public seam first: active real subprocess cancellation, already-aborted no-launch, and malformed real subprocess export must distinguish cancellation from unavailable output without leaking diagnostics. Then run the plugin suite and typecheck/build before local commit. No inference, graph cancellation generalization, shared profile edits, or public push.

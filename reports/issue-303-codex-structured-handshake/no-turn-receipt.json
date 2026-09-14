@@ -1,0 +1,31 @@
+{
+  "cwd": "/private/tmp/agents303-pilot-state-tmnayD/standalone-hook-proof",
+  "filesAtStart": {
+    "config.toml": true,
+    "hooks.json": true
+  },
+  "requests": [
+    "initialize",
+    "thread/start"
+  ],
+  "turnSent": false,
+  "thread": {
+    "id": "01a09e41-4fbc-73f3-96db-73cd2e58a8e2",
+    "sessionId": "01a09e41-4fbc-73f3-96db-73cd2e58a8e2",
+    "cwd": "/private/tmp/agents303-pilot-state-tmnayD/standalone-hook-proof",
+    "path": "/Users/man/.codex/sessions/2026/09/14/rollout-2026-09-14T00-51-15-01a09e41-4fbc-73f3-96db-73cd2e58a8e2.jsonl"
+  },
+  "pathMetadata": {
+    "returned": true,
+    "existsAtResponse": false
+  },
+  "exitCode": 0,
+  "pathExistsAfterShutdown": false,
+  "receivedResponses": [
+    2
+  ],
+  "filesAtEnd": {
+    "config.toml": true,
+    "hooks.json": true
+  }
+}

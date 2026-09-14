@@ -1,3 +1,17 @@
+/** Native-issued future paths carry no invented inode. Binding is one-way. */
+export interface CliTokenCursor {
+  bytes: number;
+  fileIdentity?: string;
+  transcriptPath?: string;
+  phase: "awaiting-file" | "baseline" | "observing" | "drained" | "failed";
+}
+export function validateCliTokenCursor(cursor: CliTokenCursor): void {
+  if (!cursor || !Number.isSafeInteger(cursor.bytes) || cursor.bytes < 0 || !["awaiting-file", "baseline", "observing", "drained", "failed"].includes(cursor.phase)) throw new Error("Invalid CLI token cursor");
+  if (cursor.transcriptPath !== undefined && (typeof cursor.transcriptPath !== "string" || !cursor.transcriptPath.startsWith("/") || cursor.transcriptPath.length > 4096)) throw new Error("Invalid CLI token path");
+  if (cursor.fileIdentity === undefined) {
+    if (cursor.bytes !== 0 || !cursor.transcriptPath || !["awaiting-file", "failed"].includes(cursor.phase)) throw new Error("Invalid pending CLI token cursor");
+  } else if (typeof cursor.fileIdentity !== "string" || !cursor.fileIdentity || cursor.fileIdentity.length > 256 || cursor.phase === "awaiting-file") throw new Error("Invalid bound CLI token cursor");
+}
 /** FNXC:CliTokenBudget 2026-09-14-02:47: Work counters exclude cache reads. */
 export interface CliTokenCounters {
   inputTokens: number;
@@ -9,7 +23,7 @@ export interface CliTokenLedger {
   version: 1;
   credits?: Record<string, CliTokenCounters>;
   owners?: Record<string, { sessionId: string; runId: string; leaseEpoch: number; agentId: string; nodeId: string }>;
-  cursors?: Record<string, { bytes: number; fileIdentity: string; phase: "baseline" | "observing" | "drained" | "failed" }>;
+  cursors?: Record<string, CliTokenCursor>;
   sessions: Record<string, Record<string, CliTokenCounters>>;
 }
 export const CLI_TOKEN_FIELDS = ["inputTokens", "outputTokens", "cachedTokens", "cacheWriteTokens"] as const;
@@ -27,7 +41,7 @@ export function validateCliTokenLedger(value: unknown): asserts value is CliToke
   }
   for (const usage of Object.values(ledger.credits ?? {})) validateCliTokenCounters(usage);
   for (const cursor of Object.values(ledger.cursors ?? {})) {
-    if (!cursor || !Number.isSafeInteger(cursor.bytes) || cursor.bytes < 0 || typeof cursor.fileIdentity !== "string" || !["baseline", "observing", "drained", "failed"].includes(cursor.phase)) throw new Error("Invalid CLI token cursor");
+    validateCliTokenCursor(cursor);
   }
   if (count > 4096 || Buffer.byteLength(JSON.stringify(ledger)) > 1024 * 1024) throw new Error("CLI token ledger capacity reached");
 }
@@ -66,6 +80,6 @@ export interface CliTokenBudgetInspection {
   protocol: "native-cli-observed-v1";
   hardLimit: number;
   observedWorkTokens: number;
-  launchGate: "authenticated-identity-before-prompt";
-  session?: { sessionId: string; nativeSessionId: string; phase: "baseline" | "observing" | "drained" | "failed"; workTokens: number };
+  launchGate: "authenticated-identity-before-prompt" | "native-structured-identity-before-prompt";
+  session?: { sessionId: string; nativeSessionId: string; phase: CliTokenCursor["phase"]; workTokens: number };
 }

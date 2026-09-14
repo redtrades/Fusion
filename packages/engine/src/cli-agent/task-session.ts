@@ -255,6 +255,7 @@ export class CliTaskSession {
     const settingsPath = join(hookDir, "settings.json");
     const hookArgv = [process.execPath, fileURLToPath(new URL("./native-hook.js", import.meta.url))];
     const stableHookCommand = hookArgv.map(part => "'" + part.replaceAll("'", "'\"'\"'") + "'").join(" ");
+    const structuredCodex = !!opts.usageProtection && adapter.id === "codex";
     const hookCommand = opts.usageProtection ? stableHookCommand : hookScriptPath;
     let usageObserver: CliTokenUsageObserver | undefined;
     const sessionHandle: { current?: CliTaskSession } = {};
@@ -296,7 +297,7 @@ export class CliTaskSession {
         toolActivityScript: hookCommand,
       },
       settingsPath,
-      ...(opts.config.cliAdapterId === "codex" ? (opts.usageProtection ? { notifyCommand: hookArgv } : { notifyProgram: join(hookDir, HOOK_SCRIPT_NAMES.notify) }) : {}),
+      ...(opts.config.cliAdapterId === "codex" && !structuredCodex ? (opts.usageProtection ? { notifyCommand: hookArgv } : { notifyProgram: join(hookDir, HOOK_SCRIPT_NAMES.notify) }) : {}),
     };
 
     // 2. Spawn (reserves the concurrency slot; throws CliConcurrencyLimitError at
@@ -329,6 +330,10 @@ export class CliTaskSession {
           },
         },
         settings,
+        ...(structuredCodex ? { codexStructured: { admit: async (identity: { nativeSessionId: string; transcriptPath: string }) => {
+          if (!usageObserver) throw new Error("Native Codex accounting unavailable");
+          await usageObserver.admitFresh(identity);
+        } } } : {}),
         beforePtyStart: async prepared => {
           preparedSessionId = prepared.id;
           const token = opts.hub.issueToken(prepared.id);
@@ -372,7 +377,7 @@ export class CliTaskSession {
     session.subscribe();
 
     // 5. Inject the prompt after readiness (fire-and-forget; readiness gates it).
-    void session.injectAfterReady(opts.prompt, adapter.capabilities.nativeDone);
+    void session.injectAfterReady(opts.prompt, adapter.capabilities.nativeDone, structuredCodex);
 
     log(`cli-task-session ${record.id}: launched for task ${opts.taskId} (adapter ${opts.config.cliAdapterId})`);
     return session;
@@ -522,18 +527,27 @@ export class CliTaskSession {
     }
   }
 
-  private async injectAfterReady(prompt: string, _nativeDone: boolean): Promise<void> {
+  private async injectAfterReady(prompt: string, _nativeDone: boolean, structuredCodex = false): Promise<void> {
     try {
       await Promise.all([this.manager.waitForReady(this.sessionId), this.usageObserver?.ready()]);
       if (this.settled) return;
     } catch {
+      if (structuredCodex && !this.settled) await this.kill("killed");
       // Session may have died before readiness — the state machine / exit handler
       // resolves the result; nothing to inject.
       return;
     }
     if (this.settled) return;
     try {
+      if (structuredCodex) {
+        await this.usageObserver!.beforeFirstTurn();
+        if (this.settled) return;
+        const machine = this.hub.getStateMachine(this.sessionId);
+        if (machine?.getState() === "starting") machine.markReady();
+        if (machine?.getState() === "ready") machine.injectPrompt();
+      }
       await this.manager.inject(this.sessionId, prompt);
+      if (structuredCodex) { if (!this.settled) this.onMachineState("done", "completed"); return; }
       // HTD: "ready → busy: prompt injected". The task-session is the component
       // that injects, so it drives the ready→busy transition on the authoritative
       // machine. The manager's PTY-output readiness is the fallback readiness
@@ -552,6 +566,7 @@ export class CliTaskSession {
       }
       this.log(`cli-task-session ${this.sessionId}: prompt injected after readiness`);
     } catch {
+      if (structuredCodex && !this.settled) await this.kill("killed");
       // Inject can fail if the session died mid-readiness — the terminal handler
       // resolves the outcome.
     }

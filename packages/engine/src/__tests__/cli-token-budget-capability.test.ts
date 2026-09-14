@@ -11,7 +11,7 @@ function fixture() {
 describe("native accounting capability inspection", () => {
   it("reports native gate/config, not a fabricated hook-readiness flag", async () => {
     const f = fixture();
-    expect(await inspectCliTokenBudget(f.store, f.sessions, query)).toEqual({ protocol: "native-cli-observed-v1", launchGate: "authenticated-identity-before-prompt", hardLimit: 10, observedWorkTokens: 0 });
+    expect(await inspectCliTokenBudget(f.store, f.sessions, query)).toEqual({ protocol: "native-cli-observed-v1", launchGate: "native-structured-identity-before-prompt", hardLimit: 10, observedWorkTokens: 0 });
     await expect(inspectCliTokenBudget(f.store, undefined, query)).rejects.toThrow("unavailable");
     f.task.tokenBudgetOverride.hard = 0;
     await expect(inspectCliTokenBudget(f.store, f.sessions, query)).rejects.toThrow("positive");

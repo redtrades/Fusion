@@ -5,7 +5,7 @@ import * as schema from "../postgres/schema/index.js";
 import { taskProjectScope } from "../postgres/data-layer.js";
 import { readTaskRowInTransaction } from "./async/async-persistence.js";
 import { acquireTaskAdvisoryXactLock } from "./task-advisory-lock.js";
-import { advanceCliTokenLedger, validateCliTokenLedger, CLI_TOKEN_FIELDS, emptyCliTokenCounters, type CliTokenCounters, type CliTokenLedger } from "../cli/cli-token-usage-types.js";
+import { advanceCliTokenLedger, validateCliTokenLedger, CLI_TOKEN_FIELDS, emptyCliTokenCounters, validateCliTokenCursor, type CliTokenCursor, type CliTokenCounters, type CliTokenLedger } from "../cli/cli-token-usage-types.js";
 
 export interface CliTokenUsageWrite {
   sessionId: string;
@@ -14,7 +14,9 @@ export interface CliTokenUsageWrite {
   admission: { runId: string; leaseEpoch: number; agentId: string; nodeId: string };
   observations: Array<{ key: string; usage: CliTokenCounters }>;
   baseline: boolean;
-  cursor: { bytes: number; fileIdentity: string; phase: "baseline" | "observing" | "drained" | "failed" };
+  cursor: CliTokenCursor;
+  /** Fresh native handshake admission, never a replay or resumed baseline. */
+  fresh?: boolean;
   limits: { soft?: number; hard?: number };
 }
 export interface CliTokenUsageAck { task: Task; hardExceeded: boolean; observedWorkTokens: number }
@@ -29,7 +31,9 @@ export async function recordCliTokenUsageFencedImpl(store: TaskStore, id: string
   const layer = store.asyncLayer;
   if (!layer?.projectId) throw new Error("CLI token persistence unavailable");
   if (request.projectId !== layer.projectId) throw new Error("CLI token project mismatch");
-  if (!request.sessionId || !request.nativeSessionId || !request.projectId || !request.admission?.runId || !request.admission.agentId || !request.admission.nodeId || !Number.isSafeInteger(request.admission.leaseEpoch) || request.admission.leaseEpoch < 1 || !Array.isArray(request.observations) || request.observations.length > 4096 || !Number.isSafeInteger(request.cursor?.bytes) || request.cursor.bytes < 0 || typeof request.cursor.fileIdentity !== "string" || request.cursor.fileIdentity.length > 256 || typeof request.baseline !== "boolean" || !["baseline", "observing", "drained", "failed"].includes(request.cursor.phase) || Object.values(request.limits).some(value => value !== undefined && (!Number.isSafeInteger(value) || value < 0))) throw new Error("Invalid CLI token request");
+  if (!request.sessionId || !request.nativeSessionId || !request.projectId || !request.admission?.runId || !request.admission.agentId || !request.admission.nodeId || !Number.isSafeInteger(request.admission.leaseEpoch) || request.admission.leaseEpoch < 1 || !Array.isArray(request.observations) || request.observations.length > 4096 || !Number.isSafeInteger(request.cursor?.bytes) || request.cursor.bytes < 0 || typeof request.baseline !== "boolean" || Object.values(request.limits).some(value => value !== undefined && (!Number.isSafeInteger(value) || value < 0))) throw new Error("Invalid CLI token request");
+  validateCliTokenCursor(request.cursor);
+  if (request.fresh !== undefined && request.fresh !== true) throw new Error("Invalid CLI fresh admission");
   return store.withTaskLock(id, async () => {
     const ack = await layer.transactionImmediate(async tx => {
       await acquireTaskAdvisoryXactLock(tx, layer.projectId, id);
@@ -45,7 +49,16 @@ export async function recordCliTokenUsageFencedImpl(store: TaskStore, id: string
       let ledger = task.sourceMetadata?.cliTokenUsage as CliTokenLedger | undefined;
       if (ledger !== undefined) validateCliTokenLedger(ledger);
       const previousCursor = ledger?.cursors?.[key];
-      if (previousCursor && previousCursor.fileIdentity !== request.cursor.fileIdentity) throw new Error("CLI token stream identity changed");
+      const previousOwner = ledger?.owners?.[key];
+      if (previousOwner && (previousOwner.sessionId !== request.sessionId || previousOwner.runId !== a.runId || previousOwner.leaseEpoch !== a.leaseEpoch || previousOwner.agentId !== a.agentId || previousOwner.nodeId !== a.nodeId)) throw new Error("CLI token stream owner changed");
+      if (request.fresh) {
+        if (session.adapterId !== "codex" || Object.hasOwn(ledger?.sessions ?? {}, key) || request.baseline || request.observations.length || request.cursor.phase !== "awaiting-file" || request.cursor.fileIdentity !== undefined) throw new Error("CLI fresh admission already used or invalid");
+      } else if (request.cursor.transcriptPath && !previousCursor) throw new Error("CLI native future stream lacks admission");
+      else if (request.cursor.phase === "awaiting-file") throw new Error("CLI pending cursor requires fresh admission");
+      if (previousCursor) {
+        if (previousCursor.transcriptPath !== request.cursor.transcriptPath || (previousCursor.fileIdentity && previousCursor.fileIdentity !== request.cursor.fileIdentity) || request.cursor.bytes < previousCursor.bytes || (previousCursor.phase === "awaiting-file" && (request.baseline || !request.cursor.fileIdentity))) throw new Error("CLI token stream identity changed");
+      }
+
       const baseline = request.baseline && !Object.hasOwn(ledger?.sessions ?? {}, key);
       const delta = emptyCliTokenCounters();
       for (const observation of request.observations) {

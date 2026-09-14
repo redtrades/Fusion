@@ -1,0 +1,18 @@
+
+/Users/man/worktrees/Fusion/303-codex-structured-handshake/packages/core/src/__tests__/postgres/cli-token-usage-fenced.pg.test.ts
+  0:0  warning  File ignored because of a matching ignore pattern. Use "--no-ignore" to disable file ignore settings or use "--no-warn-ignored" to suppress this warning
+
+/Users/man/worktrees/Fusion/303-codex-structured-handshake/packages/engine/src/__tests__/cli-codex-structured-pipeline.test.ts
+  0:0  warning  File ignored because of a matching ignore pattern. Use "--no-ignore" to disable file ignore settings or use "--no-warn-ignored" to suppress this warning
+
+/Users/man/worktrees/Fusion/303-codex-structured-handshake/packages/engine/src/__tests__/cli-fresh-codex-observer.test.ts
+  0:0  warning  File ignored because of a matching ignore pattern. Use "--no-ignore" to disable file ignore settings or use "--no-warn-ignored" to suppress this warning
+
+/Users/man/worktrees/Fusion/303-codex-structured-handshake/packages/engine/src/__tests__/cli-token-budget-pipeline.test.ts
+  0:0  warning  File ignored because of a matching ignore pattern. Use "--no-ignore" to disable file ignore settings or use "--no-warn-ignored" to suppress this warning
+
+/Users/man/worktrees/Fusion/303-codex-structured-handshake/packages/engine/src/__tests__/codex-structured-handshake.test.ts
+  0:0  warning  File ignored because of a matching ignore pattern. Use "--no-ignore" to disable file ignore settings or use "--no-warn-ignored" to suppress this warning
+
+✖ 5 problems (0 errors, 5 warnings)
+
